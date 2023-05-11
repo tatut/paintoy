@@ -38,7 +38,7 @@ face()
 
 perspective road:
 
-
+pd
 def linexyz(sx sy sz ex ey ez) {
   setxy 160-((160-:sx)/(:sz*0.1)) 100-((100-:sy)/(:sz*0.1))
   line  160-((160-:ex)/(:ez*0.1)) 100-((100-:ey)/(:ez*0.1))
@@ -78,7 +78,7 @@ def housel(x y z w h d) {
 
 housel(35 200 10 30 25 4)
 
-housel(35 200 16 30 45 5)
+housel(35 200 19 30 45 5)
 
 def linexyz(sx sy sz ex ey ez) {
   setxy 160-((160-:sx)/(:sz*0.1)) 100-((100-:sy)/(:sz*0.1))
@@ -93,16 +93,42 @@ def tree(x y z) {
   savexy ax ay
   repeat 5 [
     setang rnd 240 290
-    fd (100-:z)*0.04
+    fd (100-:z)*0.07
     setxy :ax :ay
   ]
 }
 
 /* draw a lovely random forest  */
 for [z 10 80 3] [
-  repeat rnd 1 4 [
-    tree(245 + rnd 5 20
+  repeat rnd 1 6 [
+    tree(250 + rnd 5 60
          180 + rnd 0 20
          :z)
   ]
+]
+
+/* horizon line */
+pen 6
+setxy 0 100
+setang 0 fd 320
+
+/* mountain range */
+pen 5
+setxy 0 85
+repeat 11 [
+  setang 0
+  repeat 6 [ setang rnd 278 350 fd 4 ]
+  repeat 6 [ setang rnd 10 80 fd 4 ]
+]
+
+/* sun */
+pen a
+setxy 250 20
+setang 0
+
+fill [ repeat 35 [ fd 2 rt 10 ] ]
+repeat rnd 5 25 [
+  setxy 250 30
+  setang rnd 0 360
+  fd 20
 ]
