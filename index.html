@@ -1,0 +1,73 @@
+<!DOCTYPE>
+<html>
+  <head>
+    <script src="https://SWI-Prolog.github.io/npm-swipl-wasm/3/3/0/index.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.63.1/codemirror.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.63.1/codemirror.min.css"></link>
+    <script>
+      function initCode() {
+          (async () => {
+              const swipl = await SWIPL({arguments: ["-q"]});
+              window.Prolog = swipl.prolog;
+              swipl.prolog.consult("paintoy");
+              window.CTX = document.getElementById("gfx").getContext("2d");
+          })();
+
+          let code = document.getElementById("code");
+          code.value = localStorage.getItem("paintoy") || "/* example program: draw a star */\nrepeat 5 [ fd 25 rt 144 ]";
+
+          var editor = CodeMirror.fromTextArea(document.getElementById("code"), {
+              lineNumbers: true,
+              autoCLoseBrackets: true,
+              matchBrackets: true
+          });
+          editor.on("change", _ => {
+              if(document.getElementById("live").checked) {
+                  run();
+              }
+          });
+
+          window.editor = editor;
+
+          new ResizeObserver(_=>{ resize() }).observe(document.body);
+      }
+
+      function run() {
+          let code = editor.getDoc().getValue();
+          localStorage.setItem("paintoy", code);
+          document.getElementById("log").innerHTML = ""; // clear log
+          CTX.clearRect(0,0,320,200); // clear canvas
+          Prolog.call(`run("${code}", 160, 100, [255,0,0], 0).`);
+      }
+
+      function log(msg) {
+          document.getElementById("log").innerHTML += `<div>${msg}</div>`;
+      }
+      function setcolor(rgb) {
+          console.log("SET COLOR: "+rgb);
+          CTX.strokeStyle = rgb;
+      }
+      function resize() {
+          const W = 320;
+          const H = 200;
+          let ratio = H / W;
+          let wh = window.innerHeight;
+          let ww = window.innerWidth
+          let wr = wh / ww;
+          let width = ww;
+          let height = ww * ratio;
+          let style = document.getElementById("gfx").style;
+          style.width = `${width}px`;
+          style.height = `${height}px`;
+      }
+    </script>
+
+  </head>
+  <body onload="initCode()">
+    <canvas id="gfx" width="320" height="200" style="border: solid 1px black;"></canvas>
+    <textarea id="code">repeat 5 [ fd 25 rt 144 ]</textarea>
+    <input type="checkbox" id="live"> live
+    <button onclick="run()">run</button>
+    <div id="log"></div>
+  </body>
+</html>
