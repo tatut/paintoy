@@ -38,7 +38,6 @@ face()
 
 perspective road:
 
-pd
 def linexyz(sx sy sz ex ey ez) {
   setxy 160-((160-:sx)/(:sz*0.1)) 100-((100-:sy)/(:sz*0.1))
   line  160-((160-:ex)/(:ez*0.1)) 100-((100-:ey)/(:ez*0.1))
@@ -131,4 +130,51 @@ repeat rnd 5 25 [
   setxy 250 30
   setang rnd 0 360
   fd 20
+]
+
+
+
+############### letters
+
+
+def a(s) {
+  rt -90 fd :s
+  rt 90 fd :s/2
+  rt 90 fd :s/2
+  rt 90 fd :s/2 bk :s/2 rt -90 fd :s/2
+  rt -90  }
+
+def h(s) {
+  rt -90 fd :s bk :s/2 rt 90 fd :s/2 rt -90 fd :s/2 rt 180
+  fd :s rt -90
+}
+
+def e(s) {
+  rt -90 fd :s rt 90
+  repeat 2 [ fd :s/2 bk :s/2 rt 90 fd :s/2 rt -90 ]
+  fd :s/2
+}
+
+def l(s) { rt -90 fd :s bk :s rt 90 fd :s/2 }
+def o(s) { pu fd :s/2 rt 180 pd fd :s/2 rt 90 fd :s rt 90 fd :s/2 rt 90 fd :s rt -90 }
+def t(s) { pu fd :s/2 pd rt -90 fd :s rt -90 pu fd :s/2 rt 180 pd fd :s rt 90 pu fd :s rt -90 pd }
+
+def r(s) {
+  pu fd :s/2 savexy rx ry bk :s/2 pd
+  saveang ra
+  rt -90 fd :s
+  repeat 3 [ rt 90 fd :s/2 ]
+  line :rx :ry
+  setang :ra
+}
+
+
+/* underscore for space and spacing */
+def _(s) { pu fd :s/2 pd }
+
+setxy 160 70
+setang 330
+for [ s 5 25 4 ] [
+  for [ c "hello_there" ] [ &c(:s) _(:s) rt 14 ]
+  pu fd :s fd :s pd
 ]

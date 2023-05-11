@@ -37,7 +37,7 @@
           localStorage.setItem("paintoy", code);
           document.getElementById("log").innerHTML = ""; // clear log
           CTX.clearRect(0,0,320,200); // clear canvas
-          Prolog.call(`run("${code}", 160, 100, [255,0,0], 0).`);
+          Prolog.call(`run("${code.replaceAll('"','\\"')}", 160, 100, [255,0,0], 0).`);
       }
 
       function log(msg) {

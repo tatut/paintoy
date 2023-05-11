@@ -382,7 +382,6 @@ color_rgb([R,G,B], RGB) :-
 
 exec(Program, S0) :-
     catch((log('Executing program',[]),
-           %writeln(program(Program)),
            call_time(phrase(eval_all(Program), [S0], [_S1]), Time),
            log('DONE in ~3f seconds', [Time.cpu])),
           error(Error,ErrCtx),
