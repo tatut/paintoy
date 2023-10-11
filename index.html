@@ -38,9 +38,15 @@
           Prolog.call(`run("${code.replaceAll('"','\\"')}", 160, 100, [255,0,0], 0).`);
       }
 
+      window._anim = 0;
       function live(ts) {
           if(document.getElementById("live").checked) {
-              run();
+              if(window._anim == 0) {
+                  window._anim = 2; // increase this to slower framerate
+                  run();
+              } else {
+                  window._anim--;
+              }
           }
           window.requestAnimationFrame(live);
       }

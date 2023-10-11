@@ -257,7 +257,7 @@ eval(pen(C)) -->
 
 eval(randpen) -->
     { C is random(16), format(atom(Col), '~16r', [C]) },
-    color(_,Col).
+    eval(pen(Col)).
 
 eval(repeat(num(0), _)) --> [].
 eval(repeat(NArg, Cmds)) -->
