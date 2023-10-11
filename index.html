@@ -21,11 +21,9 @@
               autoCLoseBrackets: true,
               matchBrackets: true
           });
-          editor.on("change", _ => {
-              if(document.getElementById("live").checked) {
-                  run();
-              }
-          });
+
+
+          window.requestAnimationFrame(live);
 
           window.editor = editor;
 
@@ -38,6 +36,13 @@
           document.getElementById("log").innerHTML = ""; // clear log
           CTX.clearRect(0,0,320,200); // clear canvas
           Prolog.call(`run("${code.replaceAll('"','\\"')}", 160, 100, [255,0,0], 0).`);
+      }
+
+      function live(ts) {
+          if(document.getElementById("live").checked) {
+              run();
+          }
+          window.requestAnimationFrame(live);
       }
 
       function log(msg) {
