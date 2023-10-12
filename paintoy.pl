@@ -60,7 +60,8 @@ turtle_command(Cmd) --> defn(Cmd) | fncall(Cmd) |
                         repeat(Cmd) | setxy(Cmd) |  savexy(Cmd) |
                         setang(Cmd) | saveang(Cmd) |
                         for(Cmd) | say_(Cmd) |
-                        pendown(Cmd) | penup(Cmd) | lineto(Cmd) | fill(Cmd).
+                        pendown(Cmd) | penup(Cmd) | lineto(Cmd) | fill(Cmd) |
+                        setvar(Cmd) | text(Cmd).
 
 defn(defn(FnName, ArgNames, Body)) -->
     "def", ws1, ident(FnName), ws, "(", defn_args(ArgNames), ")", ws, "{", turtle(Body), "}".
@@ -90,6 +91,7 @@ bk(bk(N)) --> "bk", exprt(N).
 rt(rt(N)) --> "rt", exprt(N).
 pen(pen(Col)) --> "pen", ws, [Col], { char_type(Col, alnum) }, ws.
 randpen(randpen) --> "randpen".
+setvar(setvar(Var,Value)) --> ident(Var), ws, ":=", ws, exprt(Value).
 setxy(setxy(X,Y)) --> "setxy", exprt(X), exprt(Y).
 savexy(savexy(X,Y)) --> "savexy", ws, ident(X), ws1, ident(Y).
 lineto(lineto(X,Y)) --> "line", exprt(X), exprt(Y).
@@ -107,7 +109,7 @@ num_(N) --> integer(N).
 num_(F) --> digits(IP), ".", digits(FP), { append(IP, ['.'|FP], Term),  read_from_chars(Term, F) }.
 arg_(num(N)) --> num(N).
 arg_(var(V)) --> ":", ident(V).
-arg_(rnd(Low,High)) --> "rnd", ws, num(Low), ws, num(High).
+arg_(rnd(Low,High)) --> "rnd", ws, exprt(Low), ws, exprt(High).
 arg_(list(Items)) --> "\"", string_without("\"", Atoms), "\"", { list_atoms_items(Atoms, Items) }.
 arg_(list(Items)) --> "[", list_items(Items), "]".
 list_items([]) --> [].
@@ -117,6 +119,7 @@ list_atoms_items([A|Atoms], [atom(A)|AtomsRest]) :- list_atoms_items(Atoms, Atom
 penup(penup) --> "pu" | "penup".
 pendown(pendown) --> "pd" | "pendown".
 fill(fill(Program)) --> "fill", ws, "[", turtle(Program), "]".
+text(text(Arg)) --> "text", ws, exprt(Arg).
 
 % Parse simple math expression tree. There is no priority for multipliation and addition.
 % Use parenthesis to change order.
@@ -125,7 +128,12 @@ exprt(E) --> ws, expr(E), ws. % top level, wrap with whitespace
 
 expr(A) --> arg_(A).
 expr(E) --> "(", exprt(E), ")".
+expr(op(Fn, Arg)) --> mathfn(Fn), "(", exprt(Arg) ")".
 expr(op(Left,Op,Right)) --> expr_left(Left), ws, op_(Op), exprt(Right).
+
+mathfn(sin) --> "sin".
+mathfn(cos) --> "cos".
+mathfn(tan) --> "tan".
 
 expr_left(E) --> "(", exprt(E), ")".
 expr_left(A) --> arg_(A).
@@ -134,6 +142,7 @@ op_(*) --> "*".
 op_(/) --> "/".
 op_(+) --> "+".
 op_(-) --> "-".
+
 
 % Interpreting a turtle program.
 %
@@ -180,7 +189,15 @@ argv(list([Item_|Items_]), [Item|Items]) -->
     argv(Item_, Item),
     argv(list(Items_), Items).
 
-argv(rnd(Low,High), V) --> { random_between(Low,High,V) }.
+argv(rnd(Low_,High_), V) -->
+    argv(Low_, Low),
+    argv(High_, High),
+    { random_between(Low,High,V) }.
+
+argv(op(sin, Arg_), V) -->
+    argv(Arg_, Arg),
+    { deg_rad(Arg, Rad),
+      V is sin(Rad) }.
 
 argv(op(Left_,Op,Right_), V) -->
     argv(Left_, Left),
@@ -229,10 +246,18 @@ move_forward(true, X, Y) --> pos(_,_,X,Y).
 move_forward(false, X, Y) --> pos(X0,Y0,X,Y), begin_path, draw_line(X0,Y0,X,Y), stroke.
 move_forward(fill, X, Y) --> pos(_,_,X,Y), { _ := 'CTX'.lineTo(X,Y) }.
 
+% Convert variable value to string for JS (now just works for lists of atoms)
+to_text([], Out) :- atom_string('', Out).
+to_text([C|Cs], Out) :-
+    to_text(Cs, CsText),
+    atom_string(C, CText),
+    string_concat(CText, CsText, Out).
+
+
 eval(rt(DegArg)) -->
     argv(DegArg, Deg),
     state(t(X,Y,C,Ang0,Env,PenUp), t(X,Y,C,Ang1,Env,PenUp)),
-    { Ang1 is (Ang0 + Deg) mod 360 }.
+    { Ang1 is round(Ang0 + Deg) mod 360 }.
 
 eval(fd(LenArg)) -->
     argv(LenArg, Len),
@@ -360,6 +385,12 @@ eval(fill(Program)) -->
     { _ := 'CTX'.fill() },
     set_pen(PenNow).
 
+eval(text(T)) -->
+    pos(X,Y),
+    argv(T, Text),
+    { to_text(Text, Text1),
+      _ := 'CTX'.fillText(Text1, X, Y) }.
+
 
 color_rgb('0', 'rgb(0,0,0)').
 color_rgb('1', 'rgb(29,43,83)').
@@ -388,6 +419,8 @@ exec(Program, S0) :-
           (log('ERROR: ~w (~w)', [Error, ErrCtx]))).
 
 run(InputStr, X0, Y0, C0, Ang0) :-
+    get_time(T), Time is round(T * 1000),
     string_chars(InputStr, Cs),
-    parse(Cs, Program),
-    exec(Program, t(X0, Y0, C0, Ang0, ctx{}, false)).
+    ( parse(Cs, Program),
+      exec(Program, t(X0, Y0, C0, Ang0, ctx{'time': Time}, false)) )
+    ; log('Parse error', []).
