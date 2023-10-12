@@ -9,9 +9,11 @@
           (async () => {
               const swipl = await SWIPL({arguments: ["-q"]});
               window.Prolog = swipl.prolog;
-              swipl.prolog.consult("paintoy");
               window.CTX = document.getElementById("gfx").getContext("2d");
-              window.requestAnimationFrame(live);
+              swipl.prolog.consult("paintoy")
+                  .then((ok,err) => window.requestAnimationFrame(live)) ;
+
+
           })();
 
           let code = document.getElementById("code");
