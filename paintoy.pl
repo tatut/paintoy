@@ -49,19 +49,21 @@ ws1 --> [W], { char_type(W, space) }, ws.
 
 parse(Source, Prg) :-
     strip_comments(Source, SourceStripped),
-    once(phrase(turtle(Prg), SourceStripped)).
+    % once(...)
+    phrase(turtle(Prg), SourceStripped).
 
 turtle([]) --> [].
 turtle([P|Ps]) --> ws, turtle_command(P), ws, turtle(Ps).
 
-turtle_command(Cmd) --> defn(Cmd) | fncall(Cmd) |
-                        fd(Cmd) | bk(Cmd) | rt(Cmd) |
-                        pen(Cmd) | randpen(Cmd) |
-                        repeat(Cmd) | setxy(Cmd) |  savexy(Cmd) |
-                        setang(Cmd) | saveang(Cmd) |
-                        for(Cmd) | say_(Cmd) |
-                        pendown(Cmd) | penup(Cmd) | lineto(Cmd) | fill(Cmd) |
-                        setvar(Cmd) | text(Cmd).
+turtle_command(Cmd)  --> defn(Cmd) | fncall(Cmd) |
+                         fd(Cmd) | bk(Cmd) | rt(Cmd) |
+                         pen(Cmd) | randpen(Cmd) |
+                         repeat(Cmd) | setxy(Cmd) |  savexy(Cmd) |
+                         setang(Cmd) | saveang(Cmd) |
+                         for(Cmd) | say_(Cmd) |
+                         pendown(Cmd) | penup(Cmd) | lineto(Cmd) | fill(Cmd) |
+                         setvar(Cmd) | text(Cmd).
+
 
 defn(defn(FnName, ArgNames, Body)) -->
     "def", ws1, ident(FnName), ws, "(", defn_args(ArgNames), ")", ws, "{", turtle(Body), "}".
@@ -112,6 +114,7 @@ arg_(var(V)) --> ":", ident(V).
 arg_(rnd(Low,High)) --> "rnd", ws, exprt(Low), ws, exprt(High).
 arg_(list(Items)) --> "\"", string_without("\"", Atoms), "\"", { list_atoms_items(Atoms, Items) }.
 arg_(list(Items)) --> "[", list_items(Items), "]".
+arg_(mathfn(Fn, Arg)) --> mathfn(Fn), "(", exprt(Arg), ")".
 list_items([]) --> [].
 list_items([I|Items]) --> exprt(I), list_items(Items).
 list_atoms_items([], []).
@@ -128,7 +131,6 @@ exprt(E) --> ws, expr(E), ws. % top level, wrap with whitespace
 
 expr(A) --> arg_(A).
 expr(E) --> "(", exprt(E), ")".
-expr(op(Fn, Arg)) --> mathfn(Fn), "(", exprt(Arg) ")".
 expr(op(Left,Op,Right)) --> expr_left(Left), ws, op_(Op), exprt(Right).
 
 mathfn(sin) --> "sin".
@@ -194,10 +196,21 @@ argv(rnd(Low_,High_), V) -->
     argv(High_, High),
     { random_between(Low,High,V) }.
 
-argv(op(sin, Arg_), V) -->
+argv(mathfn(sin, Arg_), V) -->
     argv(Arg_, Arg),
     { deg_rad(Arg, Rad),
       V is sin(Rad) }.
+
+argv(mathfn(cos, Arg_), V) -->
+    argv(Arg_, Arg),
+    { deg_rad(Arg, Rad),
+      V is cos(Rad) }.
+
+argv(mathfn(tan, Arg_), V) -->
+    argv(Arg_, Arg),
+    { deg_rad(Arg, Rad),
+      V is tan(Rad) }.
+
 
 argv(op(Left_,Op,Right_), V) -->
     argv(Left_, Left),
