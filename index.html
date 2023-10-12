@@ -11,6 +11,7 @@
               window.Prolog = swipl.prolog;
               swipl.prolog.consult("paintoy");
               window.CTX = document.getElementById("gfx").getContext("2d");
+              window.requestAnimationFrame(live);
           })();
 
           let code = document.getElementById("code");
@@ -27,9 +28,6 @@
               autoCLoseBrackets: true,
               matchBrackets: true
           });
-
-
-          window.requestAnimationFrame(live);
 
           window.editor = editor;
 
