@@ -14,7 +14,12 @@
           })();
 
           let code = document.getElementById("code");
-          code.value = localStorage.getItem("paintoy") || "/* example program: draw a star */\nrepeat 5 [ fd 25 rt 144 ]";
+          let arg = location.search;
+          if(arg.startsWith("?_=")) {
+              code.value = decodeURIComponent(location.search.substr(3));
+          } else {
+              code.value = localStorage.getItem("paintoy") || "/* example program: draw a star */\nrepeat 5 [ fd 25 rt 144 ]";
+          }
 
           var editor = CodeMirror.fromTextArea(document.getElementById("code"), {
               lineNumbers: true,
@@ -71,7 +76,18 @@
           style.width = `${width}px`;
           style.height = `${height}px`;
       }
-    </script>
+
+      function share() {
+          let code = encodeURIComponent(editor.getDoc().getValue());
+          let url = location.protocol+"//"+location.host+"/?_="+code;
+          document.body.innerHTML += `<dialog open id="share" style="position:fixed;left:25%;width:50vw;top:15vh;">
+URL: <a href="${url}">shareable link</a>
+<hr/>
+  <button onClick="let e = document.getElementById('share'); e.parentNode.removeChild(e)">Close</button>
+</dialog>`;
+
+      }
+      </script>
 
   </head>
   <body onload="initCode()">
@@ -79,6 +95,7 @@
     <textarea id="code">repeat 5 [ fd 25 rt 144 ]</textarea>
     <input type="checkbox" id="live"> live
     <button onclick="run()">run</button>
+    <button onclick="share()">share</button>
     <div id="log"></div>
   </body>
 </html>
