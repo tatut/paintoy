@@ -17,6 +17,7 @@
           let arg = location.search;
           if(arg.startsWith("?_=")) {
               code.value = decodeURIComponent(location.search.substr(3));
+              document.getElementById("live").checked = true;
           } else {
               code.value = localStorage.getItem("paintoy") || "/* example program: draw a star */\nrepeat 5 [ fd 25 rt 144 ]";
           }
