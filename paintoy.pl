@@ -60,7 +60,7 @@ turtle_command(Cmd)  --> defn(Cmd) | fncall(Cmd) |
                          pen(Cmd) | randpen(Cmd) |
                          repeat(Cmd) | setxy(Cmd) |  savexy(Cmd) |
                          setang(Cmd) | saveang(Cmd) |
-                         for(Cmd) | say_(Cmd) |
+                         for(Cmd) | when(Cmd) | say_(Cmd) |
                          pendown(Cmd) | penup(Cmd) | lineto(Cmd) | fill(Cmd) |
                          setvar(Cmd) | text(Cmd).
 
@@ -105,6 +105,7 @@ for(for(Var, From, To, Step, Program)) -->
     "[", turtle(Program), "]".
 for(for(Var,ListExpr,Program)) -->
     "for", ws, "[", ws, ident(Var), exprt(ListExpr), "]", ws, "[", turtle(Program), "]".
+when(when(Expr, Program)) --> exprt(Expr), ws, "->", ws, "[", turtle(Program), "]".
 num(N) --> "-", num_(I), { N is -I }.
 num(N) --> num_(N).
 num_(N) --> integer(N).
@@ -144,6 +145,10 @@ op_(*) --> "*".
 op_(/) --> "/".
 op_(+) --> "+".
 op_(-) --> "-".
+op_(>) --> ">".
+op_(<) --> "<".
+op_(=) --> "=".
+op_('%') --> "%".
 
 
 % Interpreting a turtle program.
@@ -226,6 +231,14 @@ eval_op(L,+,R,V) :- V is L + R.
 eval_op(L,-,R,V) :- V is L - R.
 eval_op(L,*,R,V) :- V is L * R.
 eval_op(L,/,R,V) :- V is L / R.
+eval_op(L,>,R,0) :- L =< R.
+eval_op(L,>,R,1) :- L > R.
+eval_op(L,<,R,0) :- L >= R.
+eval_op(L,<,R,1) :- L < R.
+eval_op(L,'%',R,V) :- V is L mod R.
+
+
+
 
 setval(Var, Val) -->
     env(Env0,Env1),
@@ -337,6 +350,11 @@ eval(setang(TargetX_,TargetY_)) -->
 eval(penup) --> set_pen_up.
 eval(pendown) --> set_pen_down.
 
+% Set value in context
+eval(setvar(Ident, Expr)) -->
+    argv(Expr, Val),
+    setval(Ident, Val).
+
 %% Loop from lower to upper number
 eval(for_(_, From, To, Step, _)) -->
     { (Step > 0, From > To); (Step < 0, From < To) }, [].
@@ -404,6 +422,12 @@ eval(text(T)) -->
     { to_text(Text, Text1),
       _ := 'CTX'.fillText(Text1, X, Y) }.
 
+eval(when(Expr, Program)) -->
+    argv(Expr, V),
+    eval_when(V, Program).
+
+eval_when(0, _) --> [].
+eval_when(N, Program) --> { N > 0 }, eval_all(Program).
 
 color_rgb('0', 'rgb(0,0,0)').
 color_rgb('1', 'rgb(29,43,83)').
@@ -431,9 +455,10 @@ exec(Program, S0) :-
           error(Error,ErrCtx),
           (log('ERROR: ~w (~w)', [Error, ErrCtx]))).
 
-run(InputStr, X0, Y0, C0, Ang0) :-
+run(InputStr, X0, Y0, C0, Frame) :-
     get_time(T), Time is round(T * 1000),
     string_chars(InputStr, Cs),
-    ( parse(Cs, Program),
-      exec(Program, t(X0, Y0, C0, Ang0, ctx{'time': Time}, false)) )
+    ( once(parse(Cs, Program)),
+      log('Program: ~w, Frame: ~w',[Program, Frame]),
+      exec(Program, t(X0, Y0, C0, 0, ctx{'time': Time, 'frame': Frame}, false)) )
     ; log('Parse error', []).
