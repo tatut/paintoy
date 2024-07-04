@@ -458,6 +458,6 @@ run(InputStr, X0, Y0, C0, Frame) :-
     get_time(T), Time is round(T * 1000),
     string_chars(InputStr, Cs),
     ( once(parse(Cs, Program)),
-      log('Program: ~w, Frame: ~w',[Program, Frame]),
+      %log('Program: ~w, Frame: ~w',[Program, Frame]),
       exec(Program, t(X0, Y0, C0, 0, ctx{'time': Time, 'frame': Frame}, false)) )
     ; log('Parse error', []).
