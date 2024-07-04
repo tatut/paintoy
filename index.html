@@ -3,6 +3,7 @@
   <head>
     <script src="https://SWI-Prolog.github.io/npm-swipl-wasm/3/3/0/index.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.63.1/codemirror.min.js"></script>
+    <script src="lz-string.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.63.1/codemirror.min.css"></link>
     <script>
       function initCode() {
@@ -19,7 +20,12 @@
           let code = document.getElementById("code");
           let arg = location.search;
           if(arg.startsWith("?_=")) {
-              code.value = decodeURIComponent(location.search.substr(3));
+              // uncompressed source in URL
+              code.value = decodeURIComponent(arg.substr(3));
+              document.getElementById("live").checked = true;
+          } else if(arg.startsWith("?c=")) {
+              // compressed source in URL
+              code.value = LZString.decompressFromEncodedURIComponent(arg.substr(3));
               document.getElementById("live").checked = true;
           } else {
               code.value = localStorage.getItem("paintoy") || "/* example program: draw a star */\nrepeat 5 [ fd 25 rt 144 ]";
@@ -82,8 +88,8 @@
       }
 
       function share() {
-          let code = encodeURIComponent(editor.getDoc().getValue());
-          let url = location.protocol+"//"+location.host+"/?_="+code;
+          let code = LZString.compressToEncodedURIComponent(editor.getDoc().getValue());
+          let url = location.protocol+"//"+location.host+"/?c="+code;
           document.body.innerHTML += `<dialog open id="share" style="position:fixed;left:25%;width:50vw;top:15vh;">
 URL: <a href="${url}">shareable link</a>
 <hr/>

@@ -343,8 +343,7 @@ eval(setang(TargetX_,TargetY_)) -->
     set_angle(Deg),
     { Ang is atan2(TargetY-PosY, TargetX-PosX),
       rad_deg(Ang, Deg0),
-      Deg is round(Deg0),
-      writeln(angle(to(TargetX,TargetY),from(PosX,PosY),rad_deg(Ang,Deg)))
+      Deg is round(Deg0) %writeln(angle(to(TargetX,TargetY),from(PosX,PosY),rad_deg(Ang,Deg)))
     }.
 
 eval(penup) --> set_pen_up.
@@ -412,7 +411,7 @@ eval(fill(Program)) -->
     get_pen(PenNow),
     set_pen(fill),
     eval_all(Program),
-    { writeln(after_eval(Program)) },
+    %{ writeln(after_eval(Program)) },
     { _ := 'CTX'.fill() },
     set_pen(PenNow).
 
