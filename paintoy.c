@@ -357,15 +357,7 @@ void interpret(Code* code) {
     case OP_MOD: {
       Value right = pop();
       Value left = pop();
-      printf("modulo:::\n");
-      print_value(left);
-      printf(" %% ");
-      print_value(right);
-      printf(" =>  ");
-      Value result = value_mod(left, right);
-      print_value(result);
-printf("\n");
-      push(result);
+      push(value_mod(left, right));
       break;
     }
     case OP_CALL: {
@@ -481,7 +473,6 @@ void run(const char* file) {
   while (!WindowShouldClose()) {
     if (frame != NULL) {
       frame->value.number++;
-      printf("FRAME %f\n", frame->value.number);
     }
     if (time != NULL) {
       time->value.number = (double)GetTime();
