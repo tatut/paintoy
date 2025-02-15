@@ -1,5 +1,11 @@
 :- use_module(library(dcg/basics)).
+:- use_module(library(yall)).
 :- set_prolog_flag(double_quotes, chars).
+:- dynamic constant/2. % idx and value of constants
+:- dynamic pos/1. % current position in bytecode emission
+:- dynamic fn_pos/2. % fn jump position
+:- dynamic arg_stack/2. % arg position in stack
+:- dynamic global/2. % idx and name for global identifiers
 
 log(Pattern, Args) :-
     format(string(L), Pattern, Args),
@@ -461,3 +467,230 @@ run(InputStr, X0, Y0, C0, Frame) :-
       %log('Program: ~w, Frame: ~w',[Program, Frame]),
       exec(Program, t(X0, Y0, C0, 0, ctx{'time': Time, 'frame': Frame}, false)) )
     ; log('Parse error', []).
+
+
+sample(star, "repeat 100 [ randpen rt 36 fd 50 repeat 5 [ fd 25 rt 144 ] ]").
+sample(stars, "def star(size) { repeat 5 [ fd :size rt 144 ] }
+
+rt :frame % 360
+
+repeat 10 [ randpen star(50) rt 60 pu fd 100 pd ]").
+
+
+parse_sample(Sample, Prg) :- sample(Sample, Str), string_chars(Str, Cs),
+                             parse(Cs, Prg), !.
+
+curpos(P) :- pos(P).
+incpos :- pos(P), P1 is P + 1, retract(pos(P)), asserta(pos(P1)).
+clearpos :- retractall(pos(_)), asserta(pos(0)).
+
+simple_opcode(pop1, 4).
+simple_opcode(pop2, 5).
+simple_opcode(dup, 6).
+simple_opcode(sub, 7).
+simple_opcode(dec, 8).
+simple_opcode(inc, 9).
+simple_opcode(stop, 10).
+simple_opcode(mul, 11).
+simple_opcode(div, 12).
+simple_opcode(add, 13).
+simple_opcode(return, 15).
+simple_opcode(mod, 17).
+simple_opcode(fd, 100).
+simple_opcode(rt, 101).
+
+
+emit([]) :- !.
+emit([X|Xs]) :- emit(X), !, emit(Xs).
+emit(X) :- integer(X), put_byte(X), incpos, !.
+emit(Op) :- simple_opcode(Op, Byte), emit(Byte).
+
+% emit instructions with operands
+emit(const, Val) :- constant(Idx, Val),
+                    (Idx < 256
+                    -> (emit(0), emit(Idx))
+                    ; (emit(1), emit_uint16(Idx))).
+
+emit(jz, Pos) :- emit(2), emit_uint16(Pos).
+emit(jnz, Pos) :- emit(3), emit_uint16(Pos).
+emit(call, ArgC-JumpPos) :- emit(14), emit(ArgC), emit_uint16(JumpPos).
+emit(arg, Arg) :- emit(16), emit(Arg).
+emit(global, Idx) :- emit(18), emit_uint16(Idx).
+
+constant_count(Idx) :- (aggregate_all(max(Idx0), constant(Idx0,_), Idx1)
+                       -> Idx is Idx1 + 1
+                       ; Idx = 0).
+add_constant(Value) :- constant(_, Value), !.
+add_constant(Value) :- \+ constant(_, Value),
+                       constant_count(Idx),
+                       asserta(constant(Idx, Value)).
+
+global_count(Idx) :- (aggregate_all(max(Idx0), global(Idx0,_), Idx1)
+                     -> Idx is Idx1 + 1
+                     ; Idx = 0).
+
+add_global(Name) :- global(_, Name), !.
+add_global(Name) :- \+ global(_, Name),
+                    global_count(Idx),
+                    asserta(global(Idx,Name)).
+
+% walk the program tree and record all constants
+constants(num(N)) :- add_constant(N), !.
+constants(X) :- compound(X), compound_name_arguments(X, _Name, Args),
+                maplist(constants, Args).
+constants(X) :- atom(X).
+constants([]).
+constants([X|Xs]) :- maplist(constants, [X|Xs]).
+
+% walk the program tree and record all global names
+globals(X) :- atom(X), !.
+globals(X) :- number(X), !.
+globals([]) :- !.
+globals([X|Xs]) :- !, maplist(globals, [X|Xs]).
+globals(var(Name)) :- add_global(Name), !.
+globals(X) :- compound(X), compound_name_arguments(X, _Name, Args),
+              maplist(globals, Args).
+
+
+emit_uint16(V) :- Hi is (V>>8) /\ 255, Lo is V /\ 255,
+                  emit(Hi), emit(Lo).
+emit_constant(0) :- emit(0), !.
+emit_constant(C) :- integer(C), between(1, 255, C), emit(1), emit(C), !.
+emit_constant(C) :- integer(C), between(-255, -1, C), emit(2), V is abs(C), emit(V), !.
+emit_constant(C) :- integer(C), between(256, 65535, C), emit(3),
+                    emit_uint16(C), !.
+emit_constant(C) :- integer(C), between(-65535, -256, C), emit(4),
+                    V is abs(C), emit_uint16(V), !.
+% FIXME: support the rest of the types
+
+emit_constant_pool :-
+    constant_count(C),
+    emit_uint16(C),
+    findall(Idx-V, constant(Idx,V), Constants0),
+    sort(Constants0, Constants),
+    pairs_values(Constants, Values),
+    maplist(emit_constant, Values).
+
+emit_global(Name) :- atom_codes(Name, Codes), emit(Codes), emit(0).
+
+emit_global_pool :-
+    global_count(C),
+    emit_uint16(C),
+    findall(Idx-Name, global(Idx,Name), Globals0),
+    sort(Globals0, Globals),
+    pairs_values(Globals, Names),
+    maplist(emit_global, Names).
+
+arg_positions([],_).
+arg_positions([Name|Names], N) :- asserta(arg_stack(Name, N)),
+                                  N1 is N + 1,
+                                  arg_positions(Names, N1).
+compile([]).
+compile([X|Xs]) :- compile(X), compile(Xs).
+compile(repeat(Times, Prg)) :-
+    compile(Times),
+    % take start position for jump
+    curpos(StartPos),
+    compile(Prg),
+    % decrement to loop counter
+    emit(dec),
+    % jump to start if non-zero
+    emit(jnz, StartPos),
+    % pop counter from stack
+    emit(pop1).
+
+compile(fd(Dist)) :-
+    compile(Dist),
+    emit(fd).
+
+compile(rt(Angle)) :-
+    compile(Angle),
+    emit(rt).
+
+compile(num(N)) :- emit(const, N).
+
+compile(pen(N)) :- integer(N), P is 200 - N, emit(P).
+compile(pen(a)) :- emit(210).
+compile(pen(b)) :- emit(211).
+compile(pen(c)) :- emit(212).
+compile(pen(d)) :- emit(213).
+compile(pen(e)) :- emit(214).
+compile(pen(f)) :- emit(215).
+compile(randpen) :- emit(217).
+
+compile(penup) :- emit(218).
+compile(pendown) :- emit(219).
+
+compile(op(Left, Op, Right)) :-
+    compile(Left),
+    compile(Right),
+    compile(Op).
+compile('%') :- emit(mod).
+
+% var might be an argument or a global
+compile(var(Name)) :-
+    arg_stack(Name, Idx), !,
+    emit(arg, Idx).
+compile(var(Name)) :-
+    global(Idx, Name),
+    emit(global, Idx).
+
+
+
+compile(defn(FnName, ArgNames, Body)) :-
+    % Record our start position so we can jump to it later
+    curpos(FnStart),
+    asserta(fn_pos(FnName, FnStart)),
+    % record stack positions for our arguments
+    retractall(arg_stack(_,_)),
+    arg_positions(ArgNames, 0),
+    compile(Body),
+    (FnName='__main__'
+    -> emit(stop)
+    ; emit(return)).
+
+compile(fncall(ident(FnName), ArgValues)) :-
+    fn_pos(FnName, JumpPos),
+    maplist(compile, ArgValues),
+    length(ArgValues, ArgC),
+    emit(call, ArgC-JumpPos).
+
+extract_functions([], [], []).
+
+extract_functions([defn(N,A,B)|Code], Functions, Main) :-
+    extract_functions(Code, Functions0, Main),
+    append([defn(N,A,B)], Functions0, Functions), !.
+extract_functions([Prg|Code], Functions, Main) :-
+    extract_functions(Code, Functions, Main0),
+    append([Prg], Main0, Main).
+
+% Compile whole program
+compile_program(P) :-
+    clearpos,
+    % Emit magic header to identify paintoy program
+    emit(`PTv1\n`),
+    % Gather all constants and globals
+    retractall(constant(_,_)), % clear constant pool
+    retractall(global(_,_)),
+    constants(P), !,
+    globals(P), !,
+    % Output constant & global pools
+    emit_constant_pool,
+    emit_global_pool,
+    % Compile the AST
+    clearpos, !,
+    extract_functions(P, Functions, Main),
+    compile(Functions),
+    compile(defn('__main__',[],Main)),
+    fn_pos('__main__', StartPos),
+    emit_uint16(StartPos).
+
+compile(Program, OutputFile) :-
+    setup_call_cleanup(
+        open(OutputFile, write, Out, [encoding(octet)]),
+        with_output_to(Out, compile_program(Program)),
+        close(Out)).
+
+% convenience to compile star
+cstar :- parse_sample(star, Prg), compile(Prg, 'star.pt').
+cstars :- parse_sample(stars, Prg), compile(Prg, 'stars.pt').
