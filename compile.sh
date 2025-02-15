@@ -1,3 +1,5 @@
 #!/bin/sh
 
-swipl -l paintoy.pl -t "compile_file('$1.pt','$1.ptc')"
+# compile "somefile.pt" to "somefile.ptc" (compiled)
+
+swipl -q -l paintoy.pl -t "compile_file('$1','$1c')"
