@@ -1,0 +1,5 @@
+def star(size) { repeat 5 [ fd :size rt 144 ] }
+
+rt :frame % 360
+
+repeat 10 [ randpen star(50) rt 60 pu fd 100 pd ]

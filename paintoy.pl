@@ -692,5 +692,11 @@ compile(Program, OutputFile) :-
         close(Out)).
 
 % convenience to compile star
-cstar :- parse_sample(star, Prg), compile(Prg, 'star.pt').
-cstars :- parse_sample(stars, Prg), compile(Prg, 'stars.pt').
+cstar :- parse_sample(star, Prg), compile(Prg, 'star.ptc').
+cstars :- parse_sample(stars, Prg), compile(Prg, 'stars.ptc').
+
+compile_file(File, CompiledFile) :-
+    read_file_to_string(File, Str, []),
+    string_chars(Str, Chars),
+    parse(Chars, Prg), !,
+    compile(Prg, CompiledFile).
