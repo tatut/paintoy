@@ -699,4 +699,6 @@ compile_file(File, CompiledFile) :-
     read_file_to_string(File, Str, []),
     string_chars(Str, Chars),
     parse(Chars, Prg), !,
-    compile(Prg, CompiledFile).
+    (compile(Prg, CompiledFile)
+    -> writeln(ok)
+    ; writeln('Compilation failed')).
