@@ -1,0 +1,12 @@
+// simple for loop example, draws a spiral
+
+def line(len) {
+  fd :len
+  rt 45
+}
+
+rt :frame % 360
+
+for [l 5 100 5] [
+  line(:l)
+]

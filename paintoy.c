@@ -97,6 +97,7 @@ typedef enum {
   OP_GLOBAL = 18,
   OP_GLOBAL_STORE = 19,
   OP_NEG = 20,
+  OP_GT = 21,
   /* drawing specific codes */
   OP_FD = 100,
   OP_RT = 101,
@@ -105,6 +106,7 @@ typedef enum {
   OP_SETXY = 104,
   OP_RND = 105,
   OP_XY = 106,
+  OP_LINETO = 107,
 
   // PEN 0-f omitted
   OP_PEN_RGB = 216,
@@ -356,6 +358,7 @@ void interpret(Code* code) {
       }
       break;
     }
+    case OP_DUP: push(peek()); break;
     case OP_DEC: { v = pop(); v.value.number -= 1; push(v); break; }
     case OP_INC: { v = pop(); v.value.number += 1; push(v); break; }
     case OP_POP1: { check_underflow(sp,1); sp--; break; }
@@ -405,6 +408,13 @@ void interpret(Code* code) {
       push(v);
       break;
     }
+    case OP_GT: {
+      Value right = pop();
+      Value left = pop();
+      push(number(left.value.number > right.value.number ? 1 : 0));
+      break;
+    }
+
     case OP_FD: {
       v = pop();
       double rad = angle*DEG2RAD;
@@ -441,7 +451,14 @@ void interpret(Code* code) {
       push(number(y));
       break;
     }
-
+    case OP_LINETO: {
+      double x1 = pop().value.number;
+      double y1 = pop().value.number;
+      if(pen) DrawLine(x,y,x1,y1,color);
+      x = x1;
+      y = y1;
+      break;
+    }
       // set a specific pen (ops 200 - 215 inclusive)
     case 200: case 201: case 202: case 203: case 204: case 205: case 206: case 207:
     case 208: case 209: case 210: case 211: case 212: case 213: case 214: case 215:

@@ -504,6 +504,8 @@ simple_opcode(setxy, 104).
 simple_opcode(rnd, 105).
 simple_opcode(xy, 106).
 simple_opcode(neg, 20).
+simple_opcode(lineto, 107).
+simple_opcode(gt, 21).
 
 emit([]) :- !.
 emit([X|Xs]) :- emit(X), !, emit(Xs).
@@ -557,6 +559,7 @@ globals(var(Name)) :- add_global(Name), !.
 globals(saveang(Name)) :- add_global(Name), !.
 globals(setxy(var(NameX),var(NameY))) :- add_global(NameX), add_global(NameY).
 globals(savexy(NameX,NameY)) :- add_global(NameX), add_global(NameY).
+globals(for(Var, _, _, _ ,_)) :- add_global(Var).
 globals(X) :- compound(X), compound_name_arguments(X, _Name, Args),
               maplist(globals, Args).
 
@@ -618,6 +621,10 @@ compile(bk(Dist)) :-
 compile(rt(Angle)) :-
     compile(Angle),
     emit(rt).
+compile(lineto(X,Y)) :-
+    compile(X),
+    compile(Y),
+    emit(lineto).
 
 compile(num(N)) :- emit(const, N).
 
@@ -638,6 +645,10 @@ compile(op(Left, Op, Right)) :-
     compile(Right),
     compile(Op).
 compile('%') :- emit(mod).
+compile('/') :- emit(div).
+compile('*') :- emit(mul).
+compile('+') :- emit(add).
+compile('-') :- emit(sub).
 
 % var might be an argument or a global
 compile(var(Name)) :-
@@ -689,6 +700,25 @@ compile(fncall(ident(FnName), ArgValues)) :-
     maplist(compile, ArgValues),
     length(ArgValues, ArgC),
     emit(call, ArgC-JumpPos).
+
+compile(for(Var, From, To, Step, Program)) :-
+    global(Idx, Var), % should implement locals!
+    compile(From),
+    emit(global_store, Idx), % store initial value for loop
+    curpos(LoopStart),
+    compile(Program),
+    compile(Step),
+    emit(global, Idx),
+    emit(add), % add step to loop counter
+    emit(dup), % duplicate loop counter value
+    emit(global_store, Idx), % update counter value
+    compile(To),
+    emit(gt), % check if loop counter > to
+    emit(jz, LoopStart).
+
+
+
+
 
 extract_functions([], [], []).
 
