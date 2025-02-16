@@ -96,9 +96,15 @@ typedef enum {
   OP_MOD = 17,
   OP_GLOBAL = 18,
   OP_GLOBAL_STORE = 19,
+  OP_NEG = 20,
   /* drawing specific codes */
   OP_FD = 100,
   OP_RT = 101,
+  OP_ANGLE = 102,
+  OP_SETANGLE = 103,
+  OP_SETXY = 104,
+  OP_RND = 105,
+  OP_XY = 106,
 
   // PEN 0-f omitted
   OP_PEN_RGB = 216,
@@ -389,7 +395,14 @@ void interpret(Code* code) {
       break;
     }
     case OP_GLOBAL_STORE: {
-      globals[r8()] = pop();
+      r16();
+      globals[u16] = pop();
+      break;
+    }
+    case OP_NEG: {
+      v = pop();
+      v.value.number *= -1.0;
+      push(v);
       break;
     }
     case OP_FD: {
@@ -407,6 +420,25 @@ void interpret(Code* code) {
       v = pop();
       //printf("rotate by %f\n", v.value.number);
       angle = angle + v.value.number;
+      break;
+    }
+    case OP_ANGLE:
+      push(number(angle)); break;
+    case OP_SETANGLE:
+      angle = pop().value.number; break;
+    case OP_SETXY:
+      y = pop().value.number;
+      x = pop().value.number;
+      break;
+    case OP_RND: {
+      double hi = pop().value.number;
+      double lo = pop().value.number;
+      push(number((double)GetRandomValue((int)lo,(int)hi)));
+      break;
+    }
+    case OP_XY: {
+      push(number(x));
+      push(number(y));
       break;
     }
 

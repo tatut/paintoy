@@ -52,8 +52,15 @@ ARG      16        1  push arg N to stack (0 is first arg)
 MOD      17        0  modulo
 GLOBAL   18        2  load global (uint16 index into global names pool)
 GLOBAL_STORE 19    2  put topmost value into global
+NEG      20        0  negate topmost value
 FD      100        0  move forward (takes 1 value from stack)
 RT      101        0  rotate degrees (takes 1 value from stack)
+ANGLE   102        0  load current angle
+SETANGLE 103       0  set current angle
+SETXY   104        0  set X and Y
+RND     105        0  random number between 2 values from stack
+XY      106        0  load current X and Y (top)
+
 PEN0    200        0  set pen 0
 PEN1    201        0  set pen 1
 PEN2    202        0  set pen 2

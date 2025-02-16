@@ -498,7 +498,12 @@ simple_opcode(return, 15).
 simple_opcode(mod, 17).
 simple_opcode(fd, 100).
 simple_opcode(rt, 101).
-
+simple_opcode(angle, 102).
+simple_opcode(setang, 103).
+simple_opcode(setxy, 104).
+simple_opcode(rnd, 105).
+simple_opcode(xy, 106).
+simple_opcode(neg, 20).
 
 emit([]) :- !.
 emit([X|Xs]) :- emit(X), !, emit(Xs).
@@ -516,6 +521,7 @@ emit(jnz, Pos) :- emit(3), emit_uint16(Pos).
 emit(call, ArgC-JumpPos) :- emit(14), emit(ArgC), emit_uint16(JumpPos).
 emit(arg, Arg) :- emit(16), emit(Arg).
 emit(global, Idx) :- emit(18), emit_uint16(Idx).
+emit(global_store, Idx) :- emit(19), emit_uint16(Idx).
 
 constant_count(Idx) :- (aggregate_all(max(Idx0), constant(Idx0,_), Idx1)
                        -> Idx is Idx1 + 1
@@ -548,6 +554,9 @@ globals(X) :- number(X), !.
 globals([]) :- !.
 globals([X|Xs]) :- !, maplist(globals, [X|Xs]).
 globals(var(Name)) :- add_global(Name), !.
+globals(saveang(Name)) :- add_global(Name), !.
+globals(setxy(var(NameX),var(NameY))) :- add_global(NameX), add_global(NameY).
+globals(savexy(NameX,NameY)) :- add_global(NameX), add_global(NameY).
 globals(X) :- compound(X), compound_name_arguments(X, _Name, Args),
               maplist(globals, Args).
 
@@ -602,7 +611,10 @@ compile(repeat(Times, Prg)) :-
 compile(fd(Dist)) :-
     compile(Dist),
     emit(fd).
-
+compile(bk(Dist)) :-
+    compile(Dist),
+    emit(neg),
+    emit(fd).
 compile(rt(Angle)) :-
     compile(Angle),
     emit(rt).
@@ -635,7 +647,30 @@ compile(var(Name)) :-
     global(Idx, Name),
     emit(global, Idx).
 
+compile(saveang(Name)) :-
+    emit(angle),
+    global(Idx, Name),
+    emit(global_store, Idx).
 
+compile(setang(To)) :-
+    compile(To),
+    emit(setang).
+compile(setxy(X,Y)) :-
+    compile(X),
+    compile(Y),
+    emit(setxy).
+
+compile(rnd(Lo,Hi)) :-
+    compile(Lo),
+    compile(Hi),
+    emit(rnd).
+
+compile(savexy(NameX,NameY)) :-
+    emit(xy),
+    global(YIdx, NameY),
+    emit(global_store, YIdx),
+    global(XIdx, NameX),
+    emit(global_store, XIdx).
 
 compile(defn(FnName, ArgNames, Body)) :-
     % Record our start position so we can jump to it later
