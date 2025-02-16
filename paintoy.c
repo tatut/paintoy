@@ -345,14 +345,14 @@ void interpret(Code* code) {
     case OP_CONSTL: r16(); push(code->constants[u16]); break;
     case OP_JZ: {
       r16();
-      if((int) peek().value.number == 0) {
+      if((int) pop().value.number == 0) {
         pc = u16;
       }
       break;
     }
     case OP_JNZ: {
       r16();
-      if((int) peek().value.number != 0) {
+      if((int) pop().value.number != 0) {
         dbg("%d is not zero, jumping %d\n", (int) peek().value.number, u16);
         pc = u16;
       }
