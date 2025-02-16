@@ -316,6 +316,7 @@ Value peek() {
 void interpret(Code* code) {
 #define r8() ((uint8_t)code->code[pc++])
 #define r16() { u16 = (code->code[pc]<<8) + code->code[pc+1]; pc += 2; }
+#define binop(op) { Value right = pop(); Value left = pop(); push(op(left, right)); }
   pc = code->start;
   sp = 0;
   envp = 0;
@@ -360,12 +361,11 @@ void interpret(Code* code) {
     case OP_POP1: { check_underflow(sp,1); sp--; break; }
     case OP_POP2: { check_underflow(sp,2); sp -= 2; break; }
     case OP_STOP: return;
-    case OP_MOD: {
-      Value right = pop();
-      Value left = pop();
-      push(value_mod(left, right));
-      break;
-    }
+    case OP_MUL: binop(value_mul); break;
+    case OP_MOD: binop(value_mod); break;
+    case OP_ADD: binop(value_add); break;
+    case OP_SUB: binop(value_sub); break;
+
     case OP_CALL: {
       uint8_t argc = r8();
       r16();

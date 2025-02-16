@@ -621,7 +621,7 @@ compile(rt(Angle)) :-
 
 compile(num(N)) :- emit(const, N).
 
-compile(pen(N)) :- integer(N), P is 200 - N, emit(P).
+compile(pen(A)) :- atom_number(A,N), P is 200 + N, emit(P).
 compile(pen(a)) :- emit(210).
 compile(pen(b)) :- emit(211).
 compile(pen(c)) :- emit(212).

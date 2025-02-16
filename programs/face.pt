@@ -9,6 +9,7 @@ def eye() {
 
 def hair() {
  /* random hair */
+  pen 4
   repeat 40 [
     setxy :tx :ty
     setang rnd 0 180
