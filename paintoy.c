@@ -107,6 +107,7 @@ typedef enum {
   OP_RND = 105,
   OP_XY = 106,
   OP_LINETO = 107,
+  OP_TEXT = 108,
 
   // PEN 0-f omitted
   OP_PEN_RGB = 216,
@@ -481,6 +482,9 @@ void interpret(Code* code) {
       pen = true;
       break;
 
+    case OP_TEXT:
+      DrawText(pop().value.string, x, y, 20, color);
+      break;
     default:
       printf("FIXME: unsupported opcode %d\n", code->code[pc-1]);
       exit(8);

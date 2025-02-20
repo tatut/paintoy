@@ -506,6 +506,7 @@ simple_opcode(xy, 106).
 simple_opcode(neg, 20).
 simple_opcode(lineto, 107).
 simple_opcode(gt, 21).
+simple_opcode(text, 108).
 
 emit([]) :- !.
 emit([X|Xs]) :- emit(X), !, emit(Xs).
@@ -716,7 +717,9 @@ compile(for(Var, From, To, Step, Program)) :-
     emit(gt), % check if loop counter > to
     emit(jz, LoopStart).
 
-
+compile(text(Expr)) :-
+    compile(Expr),
+    emit(text).
 
 
 

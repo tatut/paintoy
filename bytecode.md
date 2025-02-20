@@ -62,6 +62,7 @@ SETXY   104        0  set X and Y
 RND     105        0  random number between 2 values from stack
 XY      106        0  load current X and Y (top)
 LINETO  107        0  line from current pos to x,y (in stack)
+TEXT    108        0  draw text at current pos
 PEN0    200        0  set pen 0
 PEN1    201        0  set pen 1
 PEN2    202        0  set pen 2
