@@ -12,6 +12,7 @@
 #include <sys/stat.h>
 #include <stdio.h>
 #include <string.h>
+#include <setjmp.h>
 #include "raylib.h"
 #include "raymath.h"
 
@@ -44,13 +45,14 @@ Color palette[] = {
 #define dbg(args...)
 #endif
 
+jmp_buf panic_handler;
+char panic_message[64];
+
 #define panic(args...)                                                         \
   {                                                                            \
-    printf(args);                                                              \
-    printf("\n");                                                              \
-    exit(1);                                                                   \
+    snprintf(&panic_message[0], 64, args);                                     \
+    longjmp(panic_handler, 1);                                                       \
   }
-
 
 
 /* Define possible values that can be manipulated
@@ -544,9 +546,14 @@ void run(const char* file) {
 }
 
 int main(int argc, char **argv) {
-  if(argc < 2) {
-    printf("Usage: paintoy <bytecode file>\n");
+  if (setjmp(panic_handler)) {
+    printf("ERROR: %s\n", panic_message);
     exit(1);
+  } else {
+    if(argc < 2) {
+      printf("Usage: paintoy <bytecode file>\n");
+      exit(1);
+    }
+    run(argv[1]);
   }
-  run(argv[1]);
 }
