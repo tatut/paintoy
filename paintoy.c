@@ -100,6 +100,11 @@ typedef enum {
   OP_GLOBAL_STORE = 19,
   OP_NEG = 20,
   OP_GT = 21,
+  OP_GTE = 22,
+  OP_LT = 23,
+  OP_LTE = 24,
+  OP_EQ = 25,
+
   /* drawing specific codes */
   OP_FD = 100,
   OP_RT = 101,
@@ -322,6 +327,7 @@ void interpret(Code* code) {
 #define r8() ((uint8_t)code->code[pc++])
 #define r16() { u16 = (code->code[pc]<<8) + code->code[pc+1]; pc += 2; }
 #define binop(op) { Value right = pop(); Value left = pop(); push(op(left, right)); }
+#define comp(op) { Value right = pop(); Value left = pop(); push(number(left.value.number op right.value.number ? 1 : 0)); }
   pc = code->start;
   sp = 0;
   envp = 0;
@@ -411,12 +417,11 @@ void interpret(Code* code) {
       push(v);
       break;
     }
-    case OP_GT: {
-      Value right = pop();
-      Value left = pop();
-      push(number(left.value.number > right.value.number ? 1 : 0));
-      break;
-    }
+    case OP_GT: comp(>); break;
+    case OP_GTE: comp(>=); break;
+    case OP_LT: comp(<); break;
+    case OP_LTE: comp(<=); break;
+
 
     case OP_FD: {
       v = pop();

@@ -54,6 +54,10 @@ GLOBAL   18        2  load global (uint16 index into global names pool)
 GLOBAL_STORE 19    2  put topmost value into global
 NEG      20        0  negate topmost value
 GT       21        0  compare 2 topmost values, push 1 if 1st is larger than second (topmost) otherwise push 0
+GTE      22        0  greater than or equal
+LT       23        0  less than
+LTE      24        0  less than or equal
+EQ       25        0  equals
 FD      100        0  move forward (takes 1 value from stack)
 RT      101        0  rotate degrees (takes 1 value from stack)
 ANGLE   102        0  load current angle

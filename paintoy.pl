@@ -119,7 +119,7 @@ num_(F) --> digits(IP), ".", digits(FP), { append(IP, ['.'|FP], Term),  read_fro
 arg_(num(N)) --> num(N).
 arg_(var(V)) --> ":", ident(V).
 arg_(rnd(Low,High)) --> "rnd", ws, exprt(Low), ws, exprt(High).
-arg_(list(Items)) --> "\"", string_without("\"", Atoms), "\"", { list_atoms_items(Atoms, Items) }.
+arg_(str(Str)) --> "\"", string_without("\"", Codes), "\"", { string_codes(Str, Codes) }.
 arg_(list(Items)) --> "[", list_items(Items), "]".
 arg_(mathfn(Fn, Arg)) --> mathfn(Fn), "(", exprt(Arg), ")".
 list_items([]) --> [].
@@ -482,6 +482,7 @@ parse_sample(Sample, Prg) :- sample(Sample, Str), string_chars(Str, Cs),
 
 curpos(P) :- pos(P).
 incpos :- pos(P), P1 is P + 1, retract(pos(P)), asserta(pos(P1)).
+setpos(P) :- retractall(pos(_)), asserta(pos(P)).
 clearpos :- retractall(pos(_)), asserta(pos(0)).
 
 simple_opcode(pop1, 4).
@@ -506,6 +507,10 @@ simple_opcode(xy, 106).
 simple_opcode(neg, 20).
 simple_opcode(lineto, 107).
 simple_opcode(gt, 21).
+simple_opcode(gte, 22).
+simple_opcode(lt, 23).
+simple_opcode(lte, 24).
+simple_opcode(gt, 25).
 simple_opcode(text, 108).
 
 emit([]) :- !.
@@ -545,6 +550,7 @@ add_global(Name) :- \+ global(_, Name),
 
 % walk the program tree and record all constants
 constants(num(N)) :- add_constant(N), !.
+constants(str(S)) :- add_constant(S), !.
 constants(X) :- compound(X), compound_name_arguments(X, _Name, Args),
                 maplist(constants, Args).
 constants(X) :- atom(X).
@@ -574,6 +580,10 @@ emit_constant(C) :- integer(C), between(256, 65535, C), emit(3),
                     emit_uint16(C), !.
 emit_constant(C) :- integer(C), between(-65535, -256, C), emit(4),
                     V is abs(C), emit_uint16(V), !.
+emit_constant(S) :- string_length(S,L), L =< 255,
+                    emit(9), emit(L), string_codes(S, Cs), emit(Cs).
+emit_constant(S) :- string_length(S,L), L > 255,
+                    emit(10), emit_uint16(L), string_codes(S,Cs), emit(Cs).
 % FIXME: support the rest of the types
 
 emit_constant_pool :-
@@ -628,6 +638,7 @@ compile(lineto(X,Y)) :-
     emit(lineto).
 
 compile(num(N)) :- emit(const, N).
+compile(str(S)) :- emit(const, S).
 
 compile(pen(A)) :- atom_number(A,N), P is 200 + N, emit(P).
 compile(pen(a)) :- emit(210).
@@ -650,6 +661,10 @@ compile('/') :- emit(div).
 compile('*') :- emit(mul).
 compile('+') :- emit(add).
 compile('-') :- emit(sub).
+compile('>') :- emit(gt).
+compile('<') :- emit(lt).
+compile('=') :- emit(eq).
+
 
 % var might be an argument or a global
 compile(var(Name)) :-
@@ -717,6 +732,26 @@ compile(for(Var, From, To, Step, Program)) :-
     emit(gt), % check if loop counter > to
     emit(jz, LoopStart).
 
+compile(when(Expr, Program)) :-
+    compile(Expr),
+    % need to compile program to temp buffer
+    % to calculate its instruction size.
+    % the compiled program might also need pos, so adjust it
+    % to leave space for the jump instruction
+    curpos(BeforeJump),
+    ProgramPos is BeforeJump + 3, % reserve space for jz + addr
+    setpos(ProgramPos),
+    writeln(user_error, compiling(pos(ProgramPos), prg(Program))),
+    with_output_to(codes(Bytes), compile(Program)),
+    length(Bytes, ProgramLen),
+    % set position back to before the jz instruction
+    % and output jump instruction
+    setpos(BeforeJump),
+    JmpAddr is ProgramPos + ProgramLen,
+    emit(jz, JmpAddr),
+    % output the program here
+    emit(Bytes).
+
 compile(text(Expr)) :-
     compile(Expr),
     emit(text).
@@ -763,10 +798,13 @@ compile(Program, OutputFile) :-
 cstar :- parse_sample(star, Prg), compile(Prg, 'star.ptc').
 cstars :- parse_sample(stars, Prg), compile(Prg, 'stars.ptc').
 
-compile_file(File, CompiledFile) :-
+parse_file(File, Prg) :-
     read_file_to_string(File, Str, []),
     string_chars(Str, Chars),
-    parse(Chars, Prg), !,
+    parse(Chars, Prg), !.
+
+compile_file(File, CompiledFile) :-
+    parse_file(File, Prg),
     (compile(Prg, CompiledFile)
     -> writeln(ok)
     ; writeln('Compilation failed')).

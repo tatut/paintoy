@@ -5,6 +5,8 @@ def line(len) {
   rt 45
 }
 
+((:frame % 360) > 180) -> [ text "hello" ]
+
 rt :frame % 360
 
 for [l 5 100 5] [
