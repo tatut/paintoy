@@ -6,6 +6,7 @@
 :- dynamic fn_pos/2. % fn jump position
 :- dynamic arg_stack/2. % arg position in stack
 :- dynamic global/2. % idx and name for global identifiers
+:- dynamic emit_to/1.
 
 log(Pattern, Args) :-
     format(string(L), Pattern, Args),
@@ -513,9 +514,20 @@ simple_opcode(lte, 24).
 simple_opcode(gt, 25).
 simple_opcode(text, 108).
 
+emit_byte(B) :-
+    once(emit_to(Out)),
+    put_byte(Out, B).
+
+with_emit_to(Stream, Goal) :-
+    setup_call_cleanup(
+        asserta(emit_to(Stream)),
+        Goal,
+        retract(emit_to(Stream))).
+
+
 emit([]) :- !.
 emit([X|Xs]) :- emit(X), !, emit(Xs).
-emit(X) :- integer(X), put_byte(X), incpos, !.
+emit(X) :- integer(X), emit_byte(X), incpos, !.
 emit(Op) :- simple_opcode(Op, Byte), emit(Byte).
 
 % emit instructions with operands
@@ -560,6 +572,7 @@ constants([X|Xs]) :- maplist(constants, [X|Xs]).
 % walk the program tree and record all global names
 globals(X) :- atom(X), !.
 globals(X) :- number(X), !.
+globals(X) :- string(X), !.
 globals([]) :- !.
 globals([X|Xs]) :- !, maplist(globals, [X|Xs]).
 globals(var(Name)) :- add_global(Name), !.
@@ -734,6 +747,7 @@ compile(for(Var, From, To, Step, Program)) :-
 
 compile(when(Expr, Program)) :-
     compile(Expr),
+    writeln(user_error, compiled_the_check(Expr)),
     % need to compile program to temp buffer
     % to calculate its instruction size.
     % the compiled program might also need pos, so adjust it
@@ -741,8 +755,15 @@ compile(when(Expr, Program)) :-
     curpos(BeforeJump),
     ProgramPos is BeforeJump + 3, % reserve space for jz + addr
     setpos(ProgramPos),
-    writeln(user_error, compiling(pos(ProgramPos), prg(Program))),
-    with_output_to(codes(Bytes), compile(Program)),
+    writeln(compiling(pos(ProgramPos), prg(Program))),
+    setup_call_cleanup(
+        (new_memory_file(Mem),
+         open_memory_file(Mem, write, Out, [encoding(octet)])),
+        (with_emit_to(Out, compile(Program)),
+         close(Out),
+         memory_file_to_codes(Mem, Bytes)),
+        (free_memory_file(Mem))),
+    writeln(compiled_prg_to(Bytes)),
     length(Bytes, ProgramLen),
     % set position back to before the jz instruction
     % and output jump instruction
@@ -755,8 +776,6 @@ compile(when(Expr, Program)) :-
 compile(text(Expr)) :-
     compile(Expr),
     emit(text).
-
-
 
 extract_functions([], [], []).
 
@@ -776,7 +795,9 @@ compile_program(P) :-
     retractall(constant(_,_)), % clear constant pool
     retractall(global(_,_)),
     constants(P), !,
+    writeln(user_error, constants),
     globals(P), !,
+    writeln(user_error, globals),
     % Output constant & global pools
     emit_constant_pool,
     emit_global_pool,
@@ -791,7 +812,7 @@ compile_program(P) :-
 compile(Program, OutputFile) :-
     setup_call_cleanup(
         open(OutputFile, write, Out, [encoding(octet)]),
-        with_output_to(Out, compile_program(Program)),
+        with_emit_to(Out, compile_program(Program)),
         close(Out)).
 
 % convenience to compile star
