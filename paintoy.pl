@@ -795,9 +795,7 @@ compile_program(P) :-
     retractall(constant(_,_)), % clear constant pool
     retractall(global(_,_)),
     constants(P), !,
-    writeln(user_error, constants),
     globals(P), !,
-    writeln(user_error, globals),
     % Output constant & global pools
     emit_constant_pool,
     emit_global_pool,

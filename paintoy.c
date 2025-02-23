@@ -224,6 +224,14 @@ Value read_value(FILE* f) {
   case 2: return neg(number((double) read_uint8(f)));
   case 3: return number((double) read_uint16(f));
   case 4: return neg(number((double) read_uint16(f)));
+  case 9: { uint8_t size = read_uint8(f);
+      char *str = malloc(size+1);
+      str[size] = 0;
+      for(size_t i=0; i<size;i++) {
+        str[i] = read_uint8(f);
+      }
+      return string(str);
+  }
   default:
     panic("FIXME: unsupported type %d", type);
   }

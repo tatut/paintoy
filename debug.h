@@ -42,6 +42,7 @@ op_info ops[256] = {
   [OP_RND] = (op_info) {"RND", 0, 0},
   [OP_XY] = (op_info) {"XY", 0, 0},
   [OP_LINETO] = (op_info) {"LINETO", 0, 0},
+  [OP_TEXT] = (op_info) {"TEXT", 0 ,0},
   [200] = (op_info) { "PEN0", 0, 0},
   [201] = (op_info) { "PEN1", 0, 0},
   [202] = (op_info) { "PEN2", 0, 0},
