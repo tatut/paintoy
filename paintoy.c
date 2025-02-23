@@ -124,6 +124,10 @@ typedef enum {
 
 } OP;
 
+#ifdef DEBUG
+#include "debug.h"
+#endif
+
 /* Define the state of code loaded from .pt file */
 typedef struct {
   uint16_t num_constants;
@@ -499,9 +503,46 @@ void interpret(Code* code) {
   }
 }
 
+#ifdef DEBUG
+void disassemble(Code *code) {
+  pc = 0;
+  uint8_t u8;
+  uint16_t u16;
+  while (pc < code->code_size) {
+    if(pc == code->start) printf("      -- EXECUTION START --\n");
+    uint8_t op = (uint8_t) code->code[pc];
+    printf("%04ld  (%03d) %-14s", pc, op, ops[op].name);
+    pc++;
+    if (ops[op].op1 == 1) {
+      u8 = code->code[pc++];
+      printf(" %d ", u8);
+      if (op == OP_CONST)
+        print_value(code->constants[u8]);
+    } else if (ops[op].op1 == 2) {
+      u16 = (code->code[pc] << 8) + (code->code[pc + 1]);
+      pc += 2;
+      printf(" %d ", u16);
+      if (op == OP_CONSTL)
+        print_value(code->constants[u16]);
+    }
+    if (ops[op].op2 == 1) {
+      u8 = code->code[pc++];
+      printf(" %d", u8);
+    } else if (ops[op].op2 == 2) {
+      u16 = (code->code[pc] << 8) + (code->code[pc + 1]);
+      pc += 2;
+      printf(" %d", u16);
+    }
+    printf("\n");
+  }
+}
+#endif
+
+
 void run(const char* file) {
   Code code;
   code_load(&code, file);
+#ifdef DEBUG
   printf("loaded ok with %d constants, %d names and %d code size\n",
          code.num_constants, code.num_globals, code.code_size);
   for (int i = 0; i < code.num_constants; i++) {
@@ -512,6 +553,8 @@ void run(const char* file) {
   for (int i = 0; i < code.num_globals; i++) {
     printf("global: %s\n", code.global_names[i]);
   }
+  disassemble(&code);
+#endif
   // initialize globals
   globals = malloc(sizeof(Value) * code.num_globals);
   int time_idx = code_global_idx(&code, "time");
