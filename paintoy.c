@@ -115,6 +115,11 @@ typedef enum {
   OP_LTE = 24,
   OP_EQ = 25,
 
+  /* math fns */
+  OP_SIN = 80,
+  OP_COS = 81,
+  OP_TAN = 82,
+
   /* drawing specific codes */
   OP_FD = 100,
   OP_RT = 101,
@@ -362,6 +367,7 @@ void interpret(Code* code) {
 #define r16() { u16 = (code->code[pc]<<8) + code->code[pc+1]; pc += 2; }
 #define binop(op) { Value right = pop(); Value left = pop(); push(op(left, right)); }
 #define comp(op) { Value right = pop(); Value left = pop(); push(number(left.value.number op right.value.number ? 1 : 0)); }
+#define mathfn(op) { v = pop(); v.value.number = op(v.value.number*DEG2RAD); push(v); }
   pc = code->start;
   sp = 0;
   envp = 0;
@@ -457,6 +463,9 @@ void interpret(Code* code) {
     case OP_LT: comp(<); break;
     case OP_LTE: comp(<=); break;
 
+    case OP_SIN: mathfn(sin); break;
+    case OP_COS: mathfn(cos); break;
+    case OP_TAN: mathfn(tan); break;
 
     case OP_FD: {
       v = pop();

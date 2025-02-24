@@ -58,6 +58,9 @@ GTE      22        0  greater than or equal
 LT       23        0  less than
 LTE      24        0  less than or equal
 EQ       25        0  equals
+SIN      80        0  sine
+COS      81        0  cosine
+TAN      82        0  tangent
 FD      100        0  move forward (takes 1 value from stack)
 RT      101        0  rotate degrees (takes 1 value from stack)
 ANGLE   102        0  load current angle
