@@ -1,0 +1,1 @@
+repeat 54 [ randpen fd rnd 55 60 rt rnd 165 175 ]
