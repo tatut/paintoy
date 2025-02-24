@@ -140,8 +140,13 @@ typedef struct {
 } Code;
 
 void code_free(Code* code) {
-  if(code->num_constants > 0)
+  if (code->num_constants > 0) {
+    for (size_t i = 0; i < code->num_constants; i++) {
+      if (code->constants[i].type == STRING)
+        free(code->constants[i].value.string);
+    }
     free(code->constants);
+  }
   if(code->code_size > 0)
     free(code->code);
   if (code->num_globals > 0) {
