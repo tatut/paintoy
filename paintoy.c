@@ -12,7 +12,6 @@
 #include <sys/stat.h>
 #include <stdio.h>
 #include <string.h>
-#include <setjmp.h>
 #include "raylib.h"
 #include "raymath.h"
 
@@ -45,13 +44,24 @@ Color palette[] = {
 #define dbg(args...)
 #endif
 
-jmp_buf panic_handler;
+void (*panic_handler)();
 char panic_message[64];
+
+void panic_exit() {
+  printf("ERROR: %s\n", panic_message);
+  exit(1);
+}
+
+bool execution_panic;
+void panic_draw() {
+  execution_panic = true;
+  DrawText(panic_message, 50, 250, 20, RED);
+}
 
 #define panic(args...)                                                         \
   {                                                                            \
     snprintf(&panic_message[0], 64, args);                                     \
-    longjmp(panic_handler, 1);                                                       \
+    panic_handler();                                                       \
   }
 
 
@@ -139,6 +149,20 @@ typedef struct {
   char** global_names;
 } Code;
 
+// global vm stack, program counter and stack pointer
+#define MAX_STACK 8192
+Value stack[MAX_STACK];
+size_t pc = 0; // program counter
+size_t sp = 0; // stack pointer
+
+// fn environment stack
+FnEnv fn_env[MAX_STACK];
+size_t envp = 0; // environment pointer
+
+// globals storage
+Value* globals; // dynamically allocated after code loading
+
+
 void code_free(Code* code) {
   if(code->num_constants > 0)
     free(code->constants);
@@ -152,12 +176,15 @@ void code_free(Code* code) {
   }
 }
 
-int code_global_idx(Code *code, const char *name) {
+Value* code_global(Code *code, const char *name, ValueType type) {
   for (int i = 0; i < code->num_globals; i++) {
-    if (strcmp(code->global_names[i], name) == 0)
-      return i;
+    if (strcmp(code->global_names[i], name) == 0) {
+      Value *v = &globals[i];
+      v->type = type;
+      return v;
+    }
   }
-  return -1;
+  return NULL;
 }
 
 uint16_t read_uint16(FILE* f) {
@@ -233,7 +260,9 @@ Value read_value(FILE* f) {
       return string(str);
   }
   default:
-    panic("FIXME: unsupported type %d", type);
+      panic("FIXME: unsupported type %d", type);
+      // unreachable
+      return (Value) { NUMBER, 0 };
   }
 }
 
@@ -280,18 +309,6 @@ void code_load(Code *code, const char* file) {
   code->start = read_uint16(f);
 }
 
-// global vm stack, program counter and stack pointer
-#define MAX_STACK 8192
-Value stack[MAX_STACK];
-size_t pc = 0; // program counter
-size_t sp = 0; // stack pointer
-
-// fn environment stack
-FnEnv fn_env[MAX_STACK];
-size_t envp = 0; // environment pointer
-
-// globals storage
-Value* globals; // dynamically allocated after code loading
 
 #define check_overflow(sp)                                                       \
   {                                                                            \
@@ -350,8 +367,9 @@ void interpret(Code* code) {
   bool pen = true;
   FnEnv env = (FnEnv){0, 0, 0};
   pushenv(env);
+  execution_panic = false;
   dbg("---start---");
-  for(;;) {
+  while(!execution_panic) {
     dbg("pc: %ld, sp: %ld, op: %d", pc, sp, code->code[pc]);
 #ifdef DEBUG
     for (size_t i = 0; i < sp; i++) {
@@ -448,7 +466,6 @@ void interpret(Code* code) {
     }
     case OP_RT: {
       v = pop();
-      //printf("rotate by %f\n", v.value.number);
       angle = angle + v.value.number;
       break;
     }
@@ -472,8 +489,8 @@ void interpret(Code* code) {
       break;
     }
     case OP_LINETO: {
-      double x1 = pop().value.number;
       double y1 = pop().value.number;
+      double x1 = pop().value.number;
       if(pen) DrawLine(x,y,x1,y1,color);
       x = x1;
       y = y1;
@@ -565,28 +582,36 @@ void run(const char* file) {
 #endif
   // initialize globals
   globals = malloc(sizeof(Value) * code.num_globals);
-  int time_idx = code_global_idx(&code, "time");
-  int frame_idx = code_global_idx(&code, "frame");
+  Value* time = code_global(&code, "time", NUMBER);
+  Value* frame = code_global(&code, "frame", NUMBER);
+  Value *mouseX = code_global(&code, "mouseX", NUMBER);
+  Value *mouseY = code_global(&code, "mouseY", NUMBER);
+  Value *mouseLeft = code_global(&code, "mouseLeft", NUMBER);
 
-  Value *frame = frame_idx == -1 ? NULL : &globals[frame_idx];
-  if (frame != NULL) {
-    frame->type = NUMBER;
-    frame->value.number = 0;
-  }
-  Value *time = time_idx == -1 ? NULL : &globals[time_idx];
-  if (time != NULL) {
-    time->type = NUMBER;
-  }
   char title[50];
   snprintf(&title[0], 50, "paintoy: %s", file);
   InitWindow(800, 600, title);
   SetTargetFPS(120);
+
+  // set execution error handler, to just print messag
+  panic_handler = &panic_draw;
+
   while (!WindowShouldClose()) {
     if (frame != NULL) {
       frame->value.number++;
     }
     if (time != NULL) {
       time->value.number = (double)GetTime();
+    }
+    if (mouseX != NULL || mouseY != NULL) {
+      Vector2 mouse = GetMousePosition();
+      if (mouseX != NULL)
+        mouseX->value.number = mouse.x;
+      if (mouseY != NULL)
+        mouseY->value.number = mouse.y;
+    }
+    if (mouseLeft != NULL) {
+      mouseLeft->value.number = IsMouseButtonDown(MOUSE_BUTTON_LEFT);
     }
     BeginDrawing();
     ClearBackground(RAYWHITE);
@@ -602,14 +627,10 @@ void run(const char* file) {
 }
 
 int main(int argc, char **argv) {
-  if (setjmp(panic_handler)) {
-    printf("ERROR: %s\n", panic_message);
+  panic_handler = &panic_exit;
+  if(argc < 2) {
+    printf("Usage: paintoy <bytecode file>\n");
     exit(1);
-  } else {
-    if(argc < 2) {
-      printf("Usage: paintoy <bytecode file>\n");
-      exit(1);
-    }
-    run(argv[1]);
   }
+  run(argv[1]);
 }
