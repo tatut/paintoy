@@ -630,6 +630,8 @@ compile(repeat(Times, Prg)) :-
     compile(Prg),
     % decrement to loop counter
     emit(dec),
+    % duplicate value, as jump consumes it
+    emit(dup),
     % jump to start if non-zero
     emit(jnz, StartPos),
     % pop counter from stack
