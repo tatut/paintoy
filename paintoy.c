@@ -261,11 +261,10 @@ Value read_value(IN f) {
 }
 
 void code_load(Code *code, const char* file) {
-  struct stat b;
-  if(stat(file, &b) < 0) {
+  IN f = open_file(file);
+  if(!file_ok(f)) {
     panic("Can't read file '%s'.\n", file);
   }
-  IN f = open_file(file);
   char header[5];
   read_bytes(f, &header, 5);
   if(memcmp(&header, "PTv1\n", 5) != 0) {
@@ -288,7 +287,7 @@ void code_load(Code *code, const char* file) {
       // read name until 0 char found
       int c = 0;
       do {
-        name[c++] = getc(f);
+        name[c++] = read_uint8(f);
       } while (c < 128 && name[c - 1] != 0);
       if (c == 128)
         panic("Too long identifier name!");
@@ -297,7 +296,7 @@ void code_load(Code *code, const char* file) {
     }
   }
 
-  code->code_size = b.st_size - ftell(f) - 2;
+  code->code_size = file_size(f) - file_pos(f) - 2;
   code->code = malloc(code->code_size);
   read_bytes(f, code->code, code->code_size);
   code->start = read_uint16(f);

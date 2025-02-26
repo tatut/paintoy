@@ -1,7 +1,9 @@
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-
+#include <sys/types.h>
+#include <sys/stat.h>
 #include "input.h"
 
 uint16_t read_uint16(FILE* f) {
@@ -33,4 +35,16 @@ void read_bytes(IN in, void *to, size_t bytes) {
 
 void close_file(IN in) {
   fclose(in);
+}
+
+size_t file_size(IN in) {
+  struct stat b;
+  fstat(fileno(in), &b);
+  return b.st_size;
+}
+size_t file_pos(IN in) {
+  return ftell(in);
+}
+bool file_ok(IN in) {
+  return in != NULL;
 }

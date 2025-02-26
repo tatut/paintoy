@@ -24,5 +24,7 @@ uint16_t read_uint16(IN in);
 void read_bytes(IN in, void* to, size_t bytes);
 IN open_file(const char* name);
 void close_file(IN in);
-
+bool file_ok(IN in);
+size_t file_size(IN in);
+size_t file_pos(IN in);
 #endif
