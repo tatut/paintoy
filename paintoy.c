@@ -15,6 +15,7 @@
 #include <setjmp.h>
 #include "raylib.h"
 #include "raymath.h"
+#include "input.h"
 
 Color palette[] = {
   (Color) {   0,   0,   0, 255 },
@@ -165,23 +166,6 @@ int code_global_idx(Code *code, const char *name) {
   return -1;
 }
 
-uint16_t read_uint16(FILE* f) {
-  uint8_t b[2];
-  size_t read = fread(&b, 1, 2, f);
-  if(read != 2) {
-    panic("Error while reading uint16 value, read %ld bytes.\n", read);
-  }
-  return (b[0] << 8) + b[1];
-}
-
-uint8_t read_uint8(FILE* f) {
-  int c = getc(f);
-  if(c < 0) {
-    panic("Error while reading uint8 value.\n");
-    exit(4);
-  }
-  return (uint8_t) c;
-}
 
 Value number(double n) {
   Value v;
@@ -206,23 +190,23 @@ void print_value(Value v) {
 }
 
 Value value_mod(Value left, Value right) {
-  return (Value) { NUMBER, fmod(left.value.number, right.value.number) };
+  return (Value) { NUMBER, { fmod(left.value.number, right.value.number) } };
 }
 Value value_mul(Value left, Value right) {
-  return (Value) { NUMBER, left.value.number * right.value.number };
+  return (Value) { NUMBER, { left.value.number * right.value.number } };
 }
 Value value_add(Value left, Value right) {
-  return (Value) { NUMBER, left.value.number + right.value.number };
+  return (Value) { NUMBER, { left.value.number + right.value.number } };
 }
 Value value_sub(Value left, Value right) {
-  return (Value){NUMBER, left.value.number - right.value.number};
+  return (Value){NUMBER, { left.value.number - right.value.number } };
 }
 
 Value neg(Value n) {
   return number(-1.0 * n.value.number);
 }
-Value read_value(FILE* f) {
-  uint8_t type = getc(f);
+Value read_value(IN f) {
+  uint8_t type = read_uint8(f);
   switch(type) {
   case 0: return number(0);
   case 1: return number((double) read_uint8(f));
@@ -247,9 +231,9 @@ void code_load(Code *code, const char* file) {
   if(stat(file, &b) < 0) {
     panic("Can't read file '%s'.\n", file);
   }
-  FILE* f = fopen(file, "r");
+  IN f = open_file(file);
   char header[5];
-  fread(&header, 5, 1, f);
+  read_bytes(f, &header, 5);
   if(memcmp(&header, "PTv1\n", 5) != 0) {
     panic("File '%s' is not a paintoy bytecode file.\n", file);
   }
@@ -281,8 +265,9 @@ void code_load(Code *code, const char* file) {
 
   code->code_size = b.st_size - ftell(f) - 2;
   code->code = malloc(code->code_size);
-  fread(code->code, 1, code->code_size, f);
+  read_bytes(f, code->code, code->code_size);
   code->start = read_uint16(f);
+  close_file(f);
 }
 
 // global vm stack, program counter and stack pointer
