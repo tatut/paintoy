@@ -17,13 +17,24 @@ def hair() {
   ]
 }
 
+def laser() {
+  :mouseLeft -> [
+    savexy lx ly
+    pu fd 7 pd randpen line :mouseX :mouseY pu
+    setxy :lx :ly
+    pen 1
+  ]
+}
+
 def face() {
   savexy tx ty // save top of head position
   repeat 36 [fd 10 rt 10]
   rt 90 pu fd 50 rt 90 fd 20 rt 180
   pd eye()
+  laser()
   pu fd 35
   pd eye()
+  laser()
   pu bk 10 rt 90 fd 10
   pd rt 15 fd 20 rt -105 fd 5 // nose
   pu fd 20 rt 90 fd 5

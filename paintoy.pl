@@ -513,6 +513,9 @@ simple_opcode(lt, 23).
 simple_opcode(lte, 24).
 simple_opcode(gt, 25).
 simple_opcode(text, 108).
+simple_opcode(sin, 80).
+simple_opcode(cos, 81).
+simple_opcode(tan, 82).
 
 emit_byte(B) :-
     once(emit_to(Out)),
@@ -630,6 +633,8 @@ compile(repeat(Times, Prg)) :-
     compile(Prg),
     % decrement to loop counter
     emit(dec),
+    % duplicate value, as jump consumes it
+    emit(dup),
     % jump to start if non-zero
     emit(jnz, StartPos),
     % pop counter from stack
@@ -664,6 +669,10 @@ compile(randpen) :- emit(217).
 
 compile(penup) :- emit(218).
 compile(pendown) :- emit(219).
+
+compile(mathfn(sin, Of)) :- compile(Of), emit(sin).
+compile(mathfn(cos, Of)) :- compile(Of), emit(cos).
+compile(mathfn(tan, Of)) :- compile(Of), emit(tan).
 
 compile(op(Left, Op, Right)) :-
     compile(Left),
