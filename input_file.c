@@ -25,16 +25,8 @@ uint8_t read_uint8(FILE* f) {
   return (uint8_t) c;
 }
 
-IN open_file(const char* file) {
-  return fopen(file, "r");
-}
-
 void read_bytes(IN in, void *to, size_t bytes) {
   fread(to, 1, bytes, in);
-}
-
-void close_file(IN in) {
-  fclose(in);
 }
 
 size_t file_size(IN in) {
@@ -45,6 +37,13 @@ size_t file_size(IN in) {
 size_t file_pos(IN in) {
   return ftell(in);
 }
-bool file_ok(IN in) {
-  return in != NULL;
+
+void with_file(const char* file, void (*func)(IN)) {
+  IN f = fopen(file, "r");
+  if(f == NULL) {
+    printf("Can't read file '%s'.\n", file);
+    exit(1);
+  }
+  func(f);
+  fclose(f);
 }

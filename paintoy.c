@@ -260,19 +260,15 @@ Value read_value(IN f) {
   default:
       panic("FIXME: unsupported type %d", type);
       // unreachable
-      return (Value) { NUMBER, 0 };
+      return (Value) { NUMBER, { 0 } };
   }
 }
 
-void code_load(Code *code, const char* file) {
-  IN f = open_file(file);
-  if(!file_ok(f)) {
-    panic("Can't read file '%s'.\n", file);
-  }
+void code_load(Code *code, IN f) {
   char header[5];
   read_bytes(f, &header, 5);
   if(memcmp(&header, "PTv1\n", 5) != 0) {
-    panic("File '%s' is not a paintoy bytecode file.\n", file);
+    panic("File is not a paintoy bytecode file.\n");
   }
   // Read constant pool
   code->num_constants = read_uint16(f);
@@ -304,7 +300,6 @@ void code_load(Code *code, const char* file) {
   code->code = malloc(code->code_size);
   read_bytes(f, code->code, code->code_size);
   code->start = read_uint16(f);
-  close_file(f);
 }
 
 
@@ -567,9 +562,9 @@ void disassemble(Code *code) {
 #endif
 
 
-void run(const char* file) {
+void run(IN in) {
   Code code;
-  code_load(&code, file);
+  code_load(&code, in);
 #ifdef DEBUG
   printf("loaded ok with %d constants, %d names and %d code size\n",
          code.num_constants, code.num_globals, code.code_size);
@@ -591,14 +586,15 @@ void run(const char* file) {
   Value *mouseY = code_global(&code, "mouseY", NUMBER);
   Value *mouseLeft = code_global(&code, "mouseLeft", NUMBER);
 
-  char title[50];
-  snprintf(&title[0], 50, "paintoy: %s", file);
-  InitWindow(800, 600, title);
-  SetTargetFPS(120);
+  //char title[50];
+  //snprintf(&title[0], 50, "paintoy: %s", file);
+  InitWindow(800, 600, "paintoy");
+  SetTargetFPS(60);
+
+  bool showFPS=true;
 
   // set execution error handler, to just print messag
   panic_handler = &panic_draw;
-
   while (!WindowShouldClose()) {
     if (frame != NULL) {
       frame->value.number++;
@@ -619,14 +615,15 @@ void run(const char* file) {
     BeginDrawing();
     ClearBackground(RAYWHITE);
     interpret(&code);
-    DrawFPS(10,10);
+    if(showFPS) DrawFPS(10,10);
     EndDrawing();
+    if(IsKeyPressed(KEY_Q)) CloseWindow();
+    if(IsKeyPressed(KEY_F)) showFPS=!showFPS;
 
   }
   // free and exit
   free(globals);
   code_free(&code);
-  exit(0);
 }
 
 int main(int argc, char **argv) {
@@ -635,5 +632,6 @@ int main(int argc, char **argv) {
     printf("Usage: paintoy <bytecode file>\n");
     exit(1);
   }
-  run(argv[1]);
+  with_file(argv[1], run);
+  return 0;
 }
