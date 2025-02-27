@@ -233,6 +233,10 @@ Value value_add(Value left, Value right) {
 Value value_sub(Value left, Value right) {
   return (Value){NUMBER, { left.value.number - right.value.number } };
 }
+Value value_div(Value left, Value right) {
+  if(right.value.number == 0.0) panic("Div by zero.");
+  return (Value){NUMBER, { left.value.number / right.value.number } };
+}
 
 Value neg(Value n) {
   return number(-1.0 * n.value.number);
@@ -399,6 +403,7 @@ void interpret(Code* code) {
     case OP_POP2: { check_underflow(sp,2); sp -= 2; break; }
     case OP_STOP: return;
     case OP_MUL: binop(value_mul); break;
+    case OP_DIV: binop(value_div); break;
     case OP_MOD: binop(value_mod); break;
     case OP_ADD: binop(value_add); break;
     case OP_SUB: binop(value_sub); break;
