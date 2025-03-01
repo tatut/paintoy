@@ -9,6 +9,7 @@ def line(len) {
 
 rt :frame % 360
 
-for [l 5 100 5] [
+for [l 5 ((:frame % 360) + 10) 2] [
   line(:l)
+  (:l % 5) -> [ rt 3 ]
 ]

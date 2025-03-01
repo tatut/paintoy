@@ -15,6 +15,9 @@
 #include "raylib.h"
 #include "raymath.h"
 #include "input.h"
+#ifdef PLATFORM_WEB
+#include <emscripten.h>
+#endif
 
 Color palette[] = {
   (Color) {   0,   0,   0, 255 },
@@ -562,8 +565,14 @@ void disassemble(Code *code) {
 #endif
 
 
+
+void update_and_draw(); // the main render loop fn
+Code code;
+// global variable refs
+Value *time_, *frame, *mouseX, *mouseY, *mouseLeft;
+bool showFPS;
+
 void run(IN in) {
-  Code code;
   code_load(&code, in);
 #ifdef DEBUG
   printf("loaded ok with %d constants, %d names and %d code size\n",
@@ -580,50 +589,55 @@ void run(IN in) {
 #endif
   // initialize globals
   globals = malloc(sizeof(Value) * code.num_globals);
-  Value* time = code_global(&code, "time", NUMBER);
-  Value* frame = code_global(&code, "frame", NUMBER);
-  Value *mouseX = code_global(&code, "mouseX", NUMBER);
-  Value *mouseY = code_global(&code, "mouseY", NUMBER);
-  Value *mouseLeft = code_global(&code, "mouseLeft", NUMBER);
+  time_ = code_global(&code, "time", NUMBER);
+  frame = code_global(&code, "frame", NUMBER);
+  if(frame!=NULL) frame->value.number = 0;
+  mouseX = code_global(&code, "mouseX", NUMBER);
+  mouseY = code_global(&code, "mouseY", NUMBER);
+  mouseLeft = code_global(&code, "mouseLeft", NUMBER);
+  showFPS = true;
 
   //char title[50];
   //snprintf(&title[0], 50, "paintoy: %s", file);
   InitWindow(800, 600, "paintoy");
-  SetTargetFPS(60);
-
-  bool showFPS=true;
-
-  // set execution error handler, to just print messag
   panic_handler = &panic_draw;
-  while (!WindowShouldClose()) {
-    if (frame != NULL) {
-      frame->value.number++;
-    }
-    if (time != NULL) {
-      time->value.number = (double)GetTime();
-    }
-    if (mouseX != NULL || mouseY != NULL) {
-      Vector2 mouse = GetMousePosition();
-      if (mouseX != NULL)
-        mouseX->value.number = mouse.x;
-      if (mouseY != NULL)
-        mouseY->value.number = mouse.y;
-    }
-    if (mouseLeft != NULL) {
-      mouseLeft->value.number = IsMouseButtonDown(MOUSE_BUTTON_LEFT);
-    }
-    BeginDrawing();
-    ClearBackground(RAYWHITE);
-    interpret(&code);
-    if(showFPS) DrawFPS(10,10);
-    EndDrawing();
-    if(IsKeyPressed(KEY_Q)) CloseWindow();
-    if(IsKeyPressed(KEY_F)) showFPS=!showFPS;
 
-  }
+#ifdef PLATFORM_WEB
+  emscripten_set_main_loop(update_and_draw, 0, 1);
+#else
+  SetTargetFPS(120);
+  while(!WindowShouldClose()) update_and_draw();
+#endif
+
   // free and exit
   free(globals);
   code_free(&code);
+}
+
+void update_and_draw() {
+  if (frame != NULL) {
+    frame->value.number++;
+  }
+  if (time_ != NULL) {
+    time_->value.number = (double)GetTime();
+  }
+  if (mouseX != NULL || mouseY != NULL) {
+    Vector2 mouse = GetMousePosition();
+    if (mouseX != NULL)
+      mouseX->value.number = mouse.x;
+    if (mouseY != NULL)
+      mouseY->value.number = mouse.y;
+  }
+  if (mouseLeft != NULL) {
+    mouseLeft->value.number = IsMouseButtonDown(MOUSE_BUTTON_LEFT);
+  }
+  BeginDrawing();
+  ClearBackground(RAYWHITE);
+  interpret(&code);
+  if(showFPS) DrawFPS(10,10);
+  EndDrawing();
+  if(IsKeyPressed(KEY_Q)) CloseWindow();
+  if(IsKeyPressed(KEY_F)) showFPS=!showFPS;
 }
 
 int main(int argc, char **argv) {
