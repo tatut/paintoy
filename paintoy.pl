@@ -688,7 +688,7 @@ compile('=') --> emit(eq).
 
 
 % var might be an argument or a global
-compile(var(Name)) --> get(args, Args), { member(Idx-Name, Args), !} , emit(arg, Idx).
+compile(var(Name)) --> get(args, Args), { memberchk(Name-Idx, Args), !} , emit(arg, Idx).
 compile(var(Name)) --> global(Idx,Name), emit(global, Idx).
 
 
