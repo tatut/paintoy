@@ -1,12 +1,6 @@
 :- use_module(library(dcg/basics)).
 :- use_module(library(yall)).
 :- set_prolog_flag(double_quotes, chars).
-:- dynamic constant/2. % idx and value of constants
-:- dynamic pos/1. % current position in bytecode emission
-:- dynamic fn_pos/2. % fn jump position
-:- dynamic arg_stack/2. % arg position in stack
-:- dynamic global/2. % idx and name for global identifiers
-:- dynamic emit_to/1.
 
 log(Pattern, Args) :-
     format(string(L), Pattern, Args),
@@ -481,10 +475,48 @@ repeat 10 [ randpen star(50) rt 60 pu fd 100 pd ]").
 parse_sample(Sample, Prg) :- sample(Sample, Str), string_chars(Str, Cs),
                              parse(Cs, Prg), !.
 
-curpos(P) :- pos(P).
-incpos :- pos(P), P1 is P + 1, retract(pos(P)), asserta(pos(P1)).
-setpos(P) :- retractall(pos(_)), asserta(pos(P)).
-clearpos :- retractall(pos(_)), asserta(pos(0)).
+
+%%%%%%%%%%%%%%
+% Compiler into paintoy bytecode (.ptc) format
+%
+% Compiler walks the program with a DCG and converts it into
+% bytecode operations, a constant pool and a globals names pool.
+%
+% The compiler state is kept in semicontext.
+
+% The initial compiler context:
+% c{pos: 0,
+%   globals: [], num_globals: 0,
+%   constants: [], num_constants: 0,
+%   code: []).
+% where:
+% pos           the bytecode position,
+% globals       list of pairs Idx-Name (index and symbol name)
+% num_globals   how many globals there are currently
+% constants     list of pairs Idx-Value (index and value)
+% num_constants how many constants there are currently
+% code          list of bytes emitted so far for the bytecode in reverse order
+% args          Idx-Name list of arguments when compiling function
+% functions     accumulating Name-Pos list of defined functions start positions
+compiler_init(c{pos: 0,
+                globals: [], num_globals: 0,
+                constants: [], num_constants: 0,
+                code: [], args: [], functions: []}).
+
+curpos(P) --> state(S), { P = S.pos }.
+
+% Basic access to parts of state: set new value, get current value and swap value with goal
+set(K,V) --> state(S0, S1), { put_dict(K, S0, V, S1) }.
+get(K,V) --> state(S0), { get_dict(K, S0, V) }.
+swap(K, Goal) --> state(S0, S1), { get_dict(K, S0, Val0),
+                                   call(Goal, Val0, Val1),
+                                   put_dict(K, S0, Val1, S1) }.
+swap([]) --> [].
+swap([K-Goal|KGs]) --> swap(K,Goal), swap(KGs).
+add_to_list(Key, Val) --> get(Key, List0),
+                          set(Key, [Val|List0]).
+
+incpos --> swap(pos, plus(1)).
 
 simple_opcode(pop1, 4).
 simple_opcode(pop2, 5).
@@ -517,116 +549,84 @@ simple_opcode(sin, 80).
 simple_opcode(cos, 81).
 simple_opcode(tan, 82).
 
-emit_byte(B) :-
-    once(emit_to(Out)),
-    put_byte(Out, B).
+emit_byte(B) --> incpos, add_to_list(code, B).
 
-with_emit_to(Stream, Goal) :-
-    setup_call_cleanup(
-        asserta(emit_to(Stream)),
-        Goal,
-        retract(emit_to(Stream))).
+emit([]) --> [].
+emit([X|Xs]) --> emit(X), emit(Xs).
+emit(Op) --> { simple_opcode(Op, Byte), ! }, emit_byte(Byte).
+emit(X) --> { integer(X) }, emit_byte(X).
 
-
-emit([]) :- !.
-emit([X|Xs]) :- emit(X), !, emit(Xs).
-emit(X) :- integer(X), emit_byte(X), incpos, !.
-emit(Op) :- simple_opcode(Op, Byte), emit(Byte).
 
 % emit instructions with operands
-emit(const, Val) :- constant(Idx, Val),
-                    (Idx < 256
-                    -> (emit(0), emit(Idx))
-                    ; (emit(1), emit_uint16(Idx))).
+emit(const, Val) --> constant(Idx, Val),
+                     emit_const_load(Idx).
 
-emit(jz, Pos) :- emit(2), emit_uint16(Pos).
-emit(jnz, Pos) :- emit(3), emit_uint16(Pos).
-emit(call, ArgC-JumpPos) :- emit(14), emit(ArgC), emit_uint16(JumpPos).
-emit(arg, Arg) :- emit(16), emit(Arg).
-emit(global, Idx) :- emit(18), emit_uint16(Idx).
-emit(global_store, Idx) :- emit(19), emit_uint16(Idx).
+emit(jz, Pos) --> emit(2), emit_uint16(Pos).
+emit(jnz, Pos) --> emit(3), emit_uint16(Pos).
+emit(call, ArgC-JumpPos) --> emit(14), emit(ArgC), emit_uint16(JumpPos).
+emit(arg, Arg) --> emit(16), emit(Arg).
+emit(global, Idx) --> emit(18), emit_uint16(Idx).
+emit(global_store, Idx) --> emit(19), emit_uint16(Idx).
 
-constant_count(Idx) :- (aggregate_all(max(Idx0), constant(Idx0,_), Idx1)
-                       -> Idx is Idx1 + 1
-                       ; Idx = 0).
-add_constant(Value) :- constant(_, Value), !.
-add_constant(Value) :- \+ constant(_, Value),
-                       constant_count(Idx),
-                       asserta(constant(Idx, Value)).
+emit_const_load(Idx) --> { Idx < 256 }, !, emit(0), emit(Idx).
+emit_const_load(Idx) --> emit(1), emit_uint16(Idx).
 
-global_count(Idx) :- (aggregate_all(max(Idx0), global(Idx0,_), Idx1)
-                     -> Idx is Idx1 + 1
-                     ; Idx = 0).
+% Get or add new constant
+constant(Idx,Value) --> get(constants, C), { member(Idx-Value, C) }, !.
+constant(Idx,Value) --> get(constants, C), get(num_constants, Idx),
+                        set(constants, [Idx-Value|C]),
+                        swap(num_constants, plus(1)).
 
-add_global(Name) :- global(_, Name), !.
-add_global(Name) :- \+ global(_, Name),
-                    global_count(Idx),
-                    asserta(global(Idx,Name)).
-
-% walk the program tree and record all constants
-constants(num(N)) :- add_constant(N), !.
-constants(str(S)) :- add_constant(S), !.
-constants(X) :- compound(X), compound_name_arguments(X, _Name, Args),
-                maplist(constants, Args).
-constants(X) :- atom(X).
-constants([]).
-constants([X|Xs]) :- maplist(constants, [X|Xs]).
-
-% walk the program tree and record all global names
-globals(X) :- atom(X), !.
-globals(X) :- number(X), !.
-globals(X) :- string(X), !.
-globals([]) :- !.
-globals([X|Xs]) :- !, maplist(globals, [X|Xs]).
-globals(var(Name)) :- add_global(Name), !.
-globals(saveang(Name)) :- add_global(Name), !.
-globals(setxy(var(NameX),var(NameY))) :- add_global(NameX), add_global(NameY).
-globals(savexy(NameX,NameY)) :- add_global(NameX), add_global(NameY).
-globals(for(Var, _, _, _ ,_)) :- add_global(Var).
-globals(X) :- compound(X), compound_name_arguments(X, _Name, Args),
-              maplist(globals, Args).
+% Get or add new global
+global(Idx,Name) --> get(globals, G), { member(Idx-Name, G) }, !.
+global(Idx,Name) --> get(globals, G), get(num_globals, Idx),
+                     set(globals, [Idx-Name|G]),
+                     swap(num_globals, plus(1)).
 
 
-emit_uint16(V) :- Hi is (V>>8) /\ 255, Lo is V /\ 255,
-                  emit(Hi), emit(Lo).
-emit_constant(0) :- emit(0), !.
-emit_constant(C) :- integer(C), between(1, 255, C), emit(1), emit(C), !.
-emit_constant(C) :- integer(C), between(-255, -1, C), emit(2), V is abs(C), emit(V), !.
-emit_constant(C) :- integer(C), between(256, 65535, C), emit(3),
-                    emit_uint16(C), !.
-emit_constant(C) :- integer(C), between(-65535, -256, C), emit(4),
-                    V is abs(C), emit_uint16(V), !.
-emit_constant(S) :- string_length(S,L), L =< 255,
-                    emit(9), emit(L), string_codes(S, Cs), emit(Cs).
-emit_constant(S) :- string_length(S,L), L > 255,
-                    emit(10), emit_uint16(L), string_codes(S,Cs), emit(Cs).
-% FIXME: support the rest of the types
+uint16_bytes(V, Hi, Lo) :-  Hi is (V>>8) /\ 255, Lo is V /\ 255.
+emit_uint16(V) --> { uint16_bytes(V, Hi,Lo) }, emit_byte(Hi), emit_byte(Lo).
+write_uint16(V) :- uint16_bytes(V, Hi, Lo),  put_byte(Hi), put_byte(Lo).
 
-emit_constant_pool :-
-    constant_count(C),
-    emit_uint16(C),
-    findall(Idx-V, constant(Idx,V), Constants0),
-    sort(Constants0, Constants),
-    pairs_values(Constants, Values),
-    maplist(emit_constant, Values).
+write_constant(0) :- put_byte(0), !.
+write_constant(C) :- integer(C), between(1, 255, C), put_byte(1), put_byte(C), !.
+write_constant(C) :- integer(C), between(-255, -1, C), put_byte(2), V is abs(C), put_byte(V), !.
+write_constant(C) :- integer(C), between(256, 65535, C), put_byte(3),
+                    write_uint16(C), !.
+write_constant(C) :- integer(C), between(-65535, -256, C), put_byte(4),
+                    V is abs(C), write_uint16(V), !.
+write_constant(S) :- string_length(S,L), L =< 255,
+                     put_byte(9), put_byte(L), string_codes(S, Cs),
+                     maplist(put_byte, Cs).
+write_constant(S) :- string_length(S,L), L > 255,
+                     put_byte(10), write_uint16(L), string_codes(S,Cs),
+                     maplist(put_byte, Cs).
 
-emit_global(Name) :- atom_codes(Name, Codes), emit(Codes), emit(0).
+write_constant_pool(Compiler) :-
+    c{constants: Constants, num_constants: NC} :< Compiler,
+    write_uint16(NC),
+    pairs_values(Constants, Values0),
+    reverse(Values0, Values),
+    maplist(write_constant,Values).
 
-emit_global_pool :-
-    global_count(C),
-    emit_uint16(C),
-    findall(Idx-Name, global(Idx,Name), Globals0),
-    sort(Globals0, Globals),
-    pairs_values(Globals, Names),
-    maplist(emit_global, Names).
+write_global(Name) :- atom_codes(Name, Codes), maplist(put_byte, Codes), put_byte(0).
 
-arg_positions([],_).
-arg_positions([Name|Names], N) :- asserta(arg_stack(Name, N)),
-                                  N1 is N + 1,
-                                  arg_positions(Names, N1).
-compile([]).
-compile([X|Xs]) :- compile(X), compile(Xs).
-compile(repeat(Times, Prg)) :-
+write_global_pool(Compiler) :-
+    c{globals: Globals, num_globals: C} :< Compiler,
+    write_uint16(C),
+    pairs_values(Globals, Names0),
+    reverse(Names0, Names),
+    maplist(write_global, Names).
+
+arg_positions([],_) --> [].
+arg_positions([Name|Names], N) --> add_to_list(args, Name-N),
+                                   { N1 is N + 1 },
+                                   arg_positions(Names, N1).
+
+compile([]) --> [].
+compile([X|Xs]) --> compile(X), compile(Xs).
+
+compile(repeat(Times, Prg)) -->
     compile(Times),
     % take start position for jump
     curpos(StartPos),
@@ -640,106 +640,105 @@ compile(repeat(Times, Prg)) :-
     % pop counter from stack
     emit(pop1).
 
-compile(fd(Dist)) :-
+
+compile(fd(Dist)) -->
     compile(Dist),
     emit(fd).
-compile(bk(Dist)) :-
+compile(bk(Dist)) -->
     compile(Dist),
     emit(neg),
     emit(fd).
-compile(rt(Angle)) :-
+compile(rt(Angle)) -->
     compile(Angle),
     emit(rt).
-compile(lineto(X,Y)) :-
+compile(lineto(X,Y)) -->
     compile(X),
     compile(Y),
     emit(lineto).
 
-compile(num(N)) :- emit(const, N).
-compile(str(S)) :- emit(const, S).
+compile(num(N)) --> emit(const, N).
+compile(str(S)) --> emit(const, S).
 
-compile(pen(A)) :- atom_number(A,N), P is 200 + N, emit(P).
-compile(pen(a)) :- emit(210).
-compile(pen(b)) :- emit(211).
-compile(pen(c)) :- emit(212).
-compile(pen(d)) :- emit(213).
-compile(pen(e)) :- emit(214).
-compile(pen(f)) :- emit(215).
-compile(randpen) :- emit(217).
+compile(pen(A)) --> {atom_number(A,N), P is 200 + N }, emit(P).
+compile(pen(a)) --> emit(210).
+compile(pen(b)) --> emit(211).
+compile(pen(c)) --> emit(212).
+compile(pen(d)) --> emit(213).
+compile(pen(e)) --> emit(214).
+compile(pen(f)) --> emit(215).
+compile(randpen) --> emit(217).
 
-compile(penup) :- emit(218).
-compile(pendown) :- emit(219).
+compile(penup) --> emit(218).
+compile(pendown) --> emit(219).
 
-compile(mathfn(sin, Of)) :- compile(Of), emit(sin).
-compile(mathfn(cos, Of)) :- compile(Of), emit(cos).
-compile(mathfn(tan, Of)) :- compile(Of), emit(tan).
+compile(mathfn(Fn, Of)) --> compile(Of), emit(Fn).
 
-compile(op(Left, Op, Right)) :-
+compile(op(Left, Op, Right)) -->
     compile(Left),
     compile(Right),
     compile(Op).
-compile('%') :- emit(mod).
-compile('/') :- emit(div).
-compile('*') :- emit(mul).
-compile('+') :- emit(add).
-compile('-') :- emit(sub).
-compile('>') :- emit(gt).
-compile('<') :- emit(lt).
-compile('=') :- emit(eq).
+compile('%') --> emit(mod).
+compile('/') --> emit(div).
+compile('*') --> emit(mul).
+compile('+') --> emit(add).
+compile('-') --> emit(sub).
+compile('>') --> emit(gt).
+compile('<') --> emit(lt).
+compile('=') --> emit(eq).
 
 
 % var might be an argument or a global
-compile(var(Name)) :-
-    arg_stack(Name, Idx), !,
-    emit(arg, Idx).
-compile(var(Name)) :-
-    global(Idx, Name),
-    emit(global, Idx).
+compile(var(Name)) --> get(args, Args), { memberchk(Name-Idx, Args), !} , emit(arg, Idx).
+compile(var(Name)) --> global(Idx,Name), emit(global, Idx).
 
-compile(saveang(Name)) :-
+
+compile(saveang(Name)) -->
     emit(angle),
     global(Idx, Name),
     emit(global_store, Idx).
 
-compile(setang(To)) :-
+compile(setang(To)) -->
     compile(To),
     emit(setang).
-compile(setxy(X,Y)) :-
+compile(setxy(X,Y)) -->
     compile(X),
     compile(Y),
     emit(setxy).
 
-compile(rnd(Lo,Hi)) :-
+compile(rnd(Lo,Hi)) -->
     compile(Lo),
     compile(Hi),
     emit(rnd).
 
-compile(savexy(NameX,NameY)) :-
+compile(savexy(NameX,NameY)) -->
     emit(xy),
     global(YIdx, NameY),
     emit(global_store, YIdx),
     global(XIdx, NameX),
     emit(global_store, XIdx).
 
-compile(defn(FnName, ArgNames, Body)) :-
+compile(defn(FnName, ArgNames, Body)) -->
     % Record our start position so we can jump to it later
     curpos(FnStart),
-    asserta(fn_pos(FnName, FnStart)),
+    add_to_list(functions, FnName-FnStart),
     % record stack positions for our arguments
-    retractall(arg_stack(_,_)),
+    get(args, OldArgs),
     arg_positions(ArgNames, 0),
     compile(Body),
-    (FnName='__main__'
-    -> emit(stop)
-    ; emit(return)).
+    compile(fn_end(FnName)),
+    set(args,OldArgs).
 
-compile(fncall(ident(FnName), ArgValues)) :-
-    fn_pos(FnName, JumpPos),
-    maplist(compile, ArgValues),
-    length(ArgValues, ArgC),
+compile(fn_end('__main__')) --> emit(stop), !.
+compile(fn_end(_)) --> emit(return).
+
+compile(fncall(ident(FnName), ArgValues)) -->
+    get(functions, Fns),
+    { memberchk(FnName-JumpPos, Fns) },
+    compile(ArgValues),
+    { length(ArgValues, ArgC) },
     emit(call, ArgC-JumpPos).
 
-compile(for(Var, From, To, Step, Program)) :-
+compile(for(Var, From, To, Step, Program)) -->
     global(Idx, Var), % should implement locals!
     compile(From),
     emit(global_store, Idx), % store initial value for loop
@@ -754,35 +753,37 @@ compile(for(Var, From, To, Step, Program)) :-
     emit(gt), % check if loop counter > to
     emit(jz, LoopStart).
 
-compile(when(Expr, Program)) :-
+%compile(for(Var, ListExpr, Program)) :-
+%    % compile list expr and store it and 0 (index) to stack
+%    % each loop advances index and gets the current value from list
+%    % if the value is zero (C string termination), exits the loop
+%    compile(ListExpr),
+
+compile(when(Expr, Program)) -->
     compile(Expr),
-    writeln(user_error, compiled_the_check(Expr)),
     % need to compile program to temp buffer
     % to calculate its instruction size.
     % the compiled program might also need pos, so adjust it
     % to leave space for the jump instruction
-    curpos(BeforeJump),
-    ProgramPos is BeforeJump + 3, % reserve space for jz + addr
-    setpos(ProgramPos),
-    writeln(compiling(pos(ProgramPos), prg(Program))),
-    setup_call_cleanup(
-        (new_memory_file(Mem),
-         open_memory_file(Mem, write, Out, [encoding(octet)])),
-        (with_emit_to(Out, compile(Program)),
-         close(Out),
-         memory_file_to_codes(Mem, Bytes)),
-        (free_memory_file(Mem))),
-    writeln(compiled_prg_to(Bytes)),
-    length(Bytes, ProgramLen),
-    % set position back to before the jz instruction
-    % and output jump instruction
-    setpos(BeforeJump),
-    JmpAddr is ProgramPos + ProgramLen,
+    get(pos, BeforeJump),
+    { ProgramPos is BeforeJump + 3 }, % reserve space for jz + addr
+    set(pos, ProgramPos),
+    get(code, SavedCode), % save current code
+    set(code, []), % replace with empty code
+    { writeln(user_error,compiling(pos(ProgramPos), prg(Program))) },
+    compile(Program),
+    get(code, WhenCode),
+    set(code, SavedCode),
+    set(pos, BeforeJump),
+    % emit jump to after the when code
+    { length(Bytes, ProgramLen) },
+    { JmpAddr is ProgramPos + ProgramLen },
     emit(jz, JmpAddr),
     % output the program here
+    { reverse(WhenCode, Bytes) },
     emit(Bytes).
 
-compile(text(Expr)) :-
+compile(text(Expr)) -->
     compile(Expr),
     emit(text).
 
@@ -797,29 +798,29 @@ extract_functions([Prg|Code], Functions, Main) :-
 
 % Compile whole program
 compile_program(P) :-
-    clearpos,
-    % Emit magic header to identify paintoy program
-    emit(`PTv1\n`),
-    % Gather all constants and globals
-    retractall(constant(_,_)), % clear constant pool
-    retractall(global(_,_)),
-    constants(P), !,
-    globals(P), !,
-    % Output constant & global pools
-    emit_constant_pool,
-    emit_global_pool,
-    % Compile the AST
-    clearpos, !,
+    compiler_init(C0), % empty compiler state
+
+    % split fn definitions and any main code
     extract_functions(P, Functions, Main),
-    compile(Functions),
-    compile(defn('__main__',[],Main)),
-    fn_pos('__main__', StartPos),
-    emit_uint16(StartPos).
+    phrase((compile(Functions),
+            compile(defn('__main__',[],Main))),
+           [C0], [C1]),
+
+    % Write magic header to identify paintoy program
+    maplist(put_byte, `PTv1\n`),
+    % Output constant & global pools
+    write_constant_pool(C1),
+    write_global_pool(C1),
+
+    reverse(C1.code, Bytes),
+    maplist(put_byte, Bytes),
+    memberchk('__main__'-StartPos, C1.functions),
+    write_uint16(StartPos).
 
 compile(Program, OutputFile) :-
     setup_call_cleanup(
         open(OutputFile, write, Out, [encoding(octet)]),
-        with_emit_to(Out, compile_program(Program)),
+        with_output_to(Out, compile_program(Program)),
         close(Out)).
 
 % convenience to compile star
