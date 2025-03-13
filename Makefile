@@ -1,4 +1,4 @@
-CFLAGS=$$(pkg-config --cflags --libs raylib)
+CFLAGS=$$(pkg-config --cflags --libs raylib) -Iraygui/src
 
 clean:
 	rm paintoy
