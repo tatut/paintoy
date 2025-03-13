@@ -616,6 +616,9 @@ void run(IN in) {
 
 void draw_ui();
 
+#define COOLDOWN 16
+int cooldown = 0;
+
 void update_and_draw() {
   if(!paused) {
     if (frame != NULL) {
@@ -641,10 +644,12 @@ void update_and_draw() {
   if(showFPS) DrawFPS(10,10);
   if(showUI) draw_ui();
   EndDrawing();
-  if(IsKeyPressed(KEY_Q)) CloseWindow();
-  if(IsKeyPressed(KEY_F)) showFPS=!showFPS;
-  if(IsKeyPressed(KEY_U)) showUI=!showUI;
-  if(IsKeyPressed(KEY_P)) paused=!paused;
+  if(IsKeyDown(KEY_Q)) CloseWindow();
+  if(!cooldown) {
+    if(IsKeyDown(KEY_F)) { showFPS=!showFPS; cooldown = COOLDOWN; }
+    if(IsKeyDown(KEY_U)) { showUI=!showUI; cooldown = COOLDOWN; }
+    if(IsKeyDown(KEY_P)) { paused=!paused; cooldown = COOLDOWN; }
+  } else cooldown--;
 }
 
 int main(int argc, char **argv) {
