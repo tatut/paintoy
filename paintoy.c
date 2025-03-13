@@ -668,10 +668,14 @@ int main(int argc, char **argv) {
 #define RAYGUI_IMPLEMENTATION
 #include "raygui.h"
 
+int edit_string_idx = -1;
+char edit_string_buf[255];
+
 void draw_ui() {
 
   int x = 600;
   int y = 10;
+  int h = 20;
   for(int i=0;i<code.num_constants;i++) {
     char msg[64];
     int idx = snprintf(&msg[0], 64, "Constant %d: ", i);
@@ -681,14 +685,31 @@ void draw_ui() {
       snprintf(&msg[idx], 64 - idx, "%s", code.constants[i].value.string);
     }
     GuiLabel((Rectangle){x, y, 150, 10}, &msg[0]);
-    y += 10;
+    y += h;
     if(code.constants[i].type == NUMBER) {
       float val = code.constants[i].value.number;
-      GuiSliderBar((Rectangle){x,y,150,10},
+      GuiSliderBar((Rectangle){x,y,150,h},
                 "0", "1000", &val, 0.0, 1000.0);
       code.constants[i].value.number = val;
+    } else {
+      if(edit_string_idx == i) {
+        if(GuiTextBox((Rectangle){x, y, 150, h}, &edit_string_buf[0], 254, true)) {
+          // enter pressed
+          free(code.constants[i].value.string);
+          code.constants[i].value.string = malloc(strlen(&edit_string_buf[0])+1);
+          strcpy(code.constants[i].value.string, &edit_string_buf[0]);
+          edit_string_idx = -1; // go back to display mode
+        }
+      } else {
+        GuiTextBox((Rectangle){x, y, 150, h}, code.constants[i].value.string,
+                   strlen(code.constants[i].value.string), false);
+        if(GuiButton((Rectangle){x+150,y,20,h}, "#22#")) {
+          edit_string_idx = i;
+          strncpy(&edit_string_buf[0], code.constants[i].value.string, 255);
+        }
+      }
     }
-    y += 15;
+    y += 1.25*h;
   }
 
   GuiToggle((Rectangle) {430, 10, 100, 20}, "pause time", &paused);
