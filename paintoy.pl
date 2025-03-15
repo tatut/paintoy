@@ -547,6 +547,7 @@ simple_opcode(lt, 23).
 simple_opcode(lte, 24).
 simple_opcode(eq, 25).
 simple_opcode(aget, 26).
+simple_opcode(flip, 29).
 simple_opcode(text, 108).
 simple_opcode(sin, 80).
 simple_opcode(cos, 81).
@@ -571,6 +572,8 @@ emit(jnz, Pos) --> emit(3), emit_uint16(Pos).
 emit(jmp, Pos) --> emit(28), emit_uint16(Pos).
 
 emit(call, ArgC-JumpPos) --> emit(14), emit(ArgC), emit_uint16(JumpPos).
+emit(callst, ArgC) --> emit(30), emit(ArgC).
+
 emit(arg, Arg) --> emit(16), emit(Arg).
 emit(global, Idx) --> emit(18), emit_uint16(Idx).
 emit(global_store, Idx) --> emit(19), emit_uint16(Idx).
@@ -630,6 +633,19 @@ arg_positions([],_) --> [].
 arg_positions([Name|Names], N) --> add_to_list(args, Name-N),
                                    { N1 is N + 1 },
                                    arg_positions(Names, N1).
+
+% Do a sub compilation without emitting to current
+% compilation or modifying current position.
+sub(Compilation, CompiledBytes, CompiledLen) -->
+    get(pos, SavedPos),
+    get(code, SavedCode),
+    set(code, []),
+    call_dcg(Compilation),
+    get(code, CompiledBytes0),
+    { reverse(CompiledBytes0, CompiledBytes),
+      length(CompiledBytes, CompiledLen) },
+    set(pos, SavedPos),
+    set(code, SavedCode).
 
 compile([]) --> [].
 compile([X|Xs]) --> compile(X), compile(Xs).
@@ -751,20 +767,21 @@ compile(fncall(var(FnNameVar), ArgValues)) -->
     % names even stored... emit comparison and jump for
     % each function we know of
     dbg(fncall_from_var(FnNameVar)),
-    %emit(const,0), % default "not found" jump addr
+    emit(const,0), % default "not found" jump addr
     compile(var(FnNameVar)), % push value to compare
     get(pos, StartPos),
     get(code, SavedCode),
     % compile check+call for each fn
     set(code, []),
-    get(functions, Fns),
-    { length(ArgValues, ArgC),
+    get(functions, Fns0),
+    { exclude(=('__main__'-_), Fns0, Fns),
+      length(ArgValues, ArgC),
       length(Fns, FnsC),
-      Size = 13, % size of each fncall_switch item
-      EndPos is StartPos + FnsC*Size + 3
+      Size = 17, % bytecode of each fncall_switch item
+      EndPos is StartPos + FnsC*Size
     },
     dbg(before_fncall_switch(Fns)),
-    compile(fncall_switch(ArgC, EndPos, Fns)), !,
+    compile(fncall_switch(EndPos, Fns)), !,
     % ^ after that, we have jump address in stack (or zero if not found)
     dbg(after_fncall_switch),
     get(code, SwitchCode),
@@ -773,30 +790,51 @@ compile(fncall(var(FnNameVar), ArgValues)) -->
     set(pos, StartPos),
     dbg(switch_code(Bytes)),
     emit(Bytes),
+
+    % after all checks, see if we need a call
+    emit(pop1), % discard comparison value
+    emit(dup), % duplicate jump address
+    dbg(before_sub),
+    sub((compile(ArgValues),
+         { JmpPos is ArgC + 1 },
+         emit(stackref, JmpPos),
+         emit(callst, ArgC)), CallBytes, CallLen),
+    dbg(after_sub),
+    get(pos, Pos),
+    { NoCallPos is Pos + CallLen + 3 },
+    emit(jz, NoCallPos),
+    emit(CallBytes),
+    emit(pop1), % remove last call address
     dbg(fncall_by_var_finish).
 
 
-compile(fncall_switch(_, _, [])) --> dbg(last_switch_compiled).
-compile(fncall_switch(ArgC, EndPos, ['__main__'-_|Fns])) -->
+compile(fncall_switch(_, [])) --> dbg(last_switch_compiled).
+compile(fncall_switch(FoundPos, ['__main__'-_|Fns])) -->
     !,
-    compile(fncall_switch(ArgC, EndPos, Fns)).
-compile(fncall_switch(ArgC, EndPos, [FnName-JumpPos|Fns])) -->
-    dbg(fncall_switch_0(argc(ArgC),endpos(EndPos),fn(FnName),jumppos(JumpPos),fns(Fns))),
+    compile(fncall_switch(FoundPos, Fns)).
+compile(fncall_switch(FoundPos, [FnName-JumpPos|Fns])) -->
+    dbg(fncall_switch_0(foundpos(FoundPos),fn(FnName),jumppos(JumpPos),fns(Fns))),
+    % [addr] [comparison value]
+    % this consumes the comparison value if a match is found
+    % and leaves the jump addr to the stack
+    %
+    % if there is no match, the stack is left unchanged
     emit(dup), % duplicate the var value we use for the eq check
     emit(constl, FnName),
     emit(eq),
     dbg(fncall_switch_1),
 
-    get(pos, Before), { After is Before + 10 },
+    get(pos, Before), { After is Before + 12 },
     emit(jz, After), % jump after call
 
+    % push jump address to stack
     dbg(fncall_switch_1(emitting_call)),
-    % call function
-    emit(call, ArgC-JumpPos),
-    % jump to end (skip other tests)
-    emit(jmp, EndPos),
+    emit(flip), emit(pop1), % leaves [comparison value] on stack
+    emit(constl, JumpPos), % push jump pos to stack
+    emit(flip), % leaves [addr] [comparison value] on stack
+    emit(jmp, FoundPos),
 
-    compile(fncall_switch(ArgC,EndPos,Fns)).
+    compile(fncall_switch(FoundPos,Fns)).
 
 % compile_file('programs/letters.pt', 'test.ptc').
 

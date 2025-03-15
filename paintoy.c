@@ -121,6 +121,8 @@ typedef enum {
   OP_AGET = 26,
   OP_STACKREF = 27,
   OP_JMP = 28,
+  OP_FLIP = 29,
+  OP_CALLST = 30,
 
   /* math fns */
   OP_SIN = 80,
@@ -490,6 +492,21 @@ void interpret(Code* code) {
     }
     case OP_JMP: {
       r16();
+      pc = u16;
+      break;
+    }
+    case OP_FLIP: {
+      Value top1 = pop();
+      Value top2 = pop();
+      push(top1);
+      push(top2);
+      break;
+    }
+    case OP_CALLST: {
+      uint8_t argc = r8();
+      u16 = (uint16_t) pop().value.number;
+      env = (FnEnv){sp - argc, argc, pc};
+      pushenv(env);
       pc = u16;
       break;
     }

@@ -61,6 +61,8 @@ EQ       25        0  equals
 AGET     26        0  get Nth value from array (string) and push it to stack
 STACKREF 27        1  duplicate Nth topmost value (0 arg is same as dup)
 JMP      28        2  unconditional jump
+FLIP     29        0  flip top 2 elements in stack
+CALLST   30        1  call with address in top of stack
 SIN      80        0  sine
 COS      81        0  cosine
 TAN      82        0  tangent
