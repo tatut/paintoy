@@ -749,9 +749,9 @@ void draw_ui() {
     y += h;
     if(code.constants[i].type == NUMBER) {
       float val = code.constants[i].value.number;
-      GuiSliderBar((Rectangle){x,y,150,h},
-                "0", "1000", &val, 0.0, 1000.0);
-      code.constants[i].value.number = val;
+      if(GuiSliderBar((Rectangle){x,y,150,h}, "-1000", "1000", &val, -1000.0, 1000.0))
+        code.constants[i].value.number = val;
+
     } else {
       if(edit_string_idx == i) {
         if(GuiTextBox((Rectangle){x, y, 150, h}, &edit_string_buf[0], 254, true)) {
