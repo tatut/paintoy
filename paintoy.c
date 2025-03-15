@@ -118,6 +118,9 @@ typedef enum {
   OP_LT = 23,
   OP_LTE = 24,
   OP_EQ = 25,
+  OP_AGET = 26,
+  OP_STACKREF = 27,
+  OP_JMP = 28,
 
   /* math fns */
   OP_SIN = 80,
@@ -454,6 +457,21 @@ void interpret(Code* code) {
     case OP_COS: mathfn(cos); break;
     case OP_TAN: mathfn(tan); break;
 
+    case OP_AGET: {
+      size_t n = (size_t)pop().value.number;
+      char *arr = pop().value.string;
+      push(number(arr[n]));
+      break;
+    }
+    case OP_STACKREF: {
+      push(stack[sp - r8()]);
+      break;
+    }
+    case OP_JMP: {
+      r16();
+      pc = u16;
+      break;
+    }
     case OP_FD: {
       v = pop();
       double rad = angle*DEG2RAD;
