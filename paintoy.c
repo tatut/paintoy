@@ -350,6 +350,25 @@ Value peek() {
   return stack[sp-1];
 }
 
+bool equals(Value l, Value r) {
+  if(l.type == r.type) {
+    if(l.type == NUMBER) {
+      return l.value.number == l.value.number;
+    } else {
+      return strcmp(l.value.string, l.value.string) == 0;
+    }
+  } else {
+    // compare string to number, check if number is the char code
+    // of the string (must be len 1)
+    char* str = l.type == STRING ? l.value.string : r.value.string;
+    double n = l.type == NUMBER ? l.value.number : r.value.number;
+    return
+      n >= 0 && n <= 255 &&
+      strlen(str) == 1 &&
+      str[0] == (char)n;
+  }
+}
+
 /* The main loop of the bytecode interpreter */
 void interpret(Code* code) {
 #define r8() ((uint8_t)code->code[pc++])
@@ -370,7 +389,7 @@ void interpret(Code* code) {
   execution_panic = false;
   dbg("---start---");
   while(!execution_panic) {
-    dbg("pc: %ld, sp: %ld, op: %d", pc, sp, code->code[pc]);
+    dbg("%s pc: %ld, sp: %ld, op: %d", ops[code->code[pc]].name, pc, sp, code->code[pc]);
 #ifdef DEBUG
     for (size_t i = 0; i < sp; i++) {
       printf("[");
@@ -452,6 +471,7 @@ void interpret(Code* code) {
     case OP_GTE: comp(>=); break;
     case OP_LT: comp(<); break;
     case OP_LTE: comp(<=); break;
+    case OP_EQ: push(number(equals(pop(),pop()))); break;
 
     case OP_SIN: mathfn(sin); break;
     case OP_COS: mathfn(cos); break;
@@ -460,6 +480,7 @@ void interpret(Code* code) {
     case OP_AGET: {
       size_t n = (size_t)pop().value.number;
       char *arr = pop().value.string;
+      printf("got: %c\n", arr[n]);
       push(number(arr[n]));
       break;
     }

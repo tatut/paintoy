@@ -34,7 +34,7 @@ op_info ops[256] = {
   [OP_LT] = (op_info) {"LT (<)", 0 , 0},
   [OP_LTE] = (op_info) {"LTE (<=)", 0, 0},
   [OP_EQ] = (op_info) {"EQ (=)", 0, 0},
-  [OP_AGET] = (op_info) {"AGET", 1, 0},
+  [OP_AGET] = (op_info) {"AGET", 0, 0},
   [OP_STACKREF] = (op_info) {"STACKREF", 1, 0},
   [OP_JMP] = (op_info) {"JMP", 2, 0 },
   [OP_SIN] = (op_info) {"SIN", 0,0},

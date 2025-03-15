@@ -505,6 +505,8 @@ compiler_init(c{pos: 0,
 
 curpos(P) --> state(S), { P = S.pos }.
 
+dbg(X) --> { writeln(user_error, X) }, [].
+
 % Basic access to parts of state: set new value, get current value and swap value with goal
 set(K,V) --> state(S0, S1), { put_dict(K, S0, V, S1) }.
 get(K,V) --> state(S0), { get_dict(K, S0, V) }.
@@ -543,7 +545,7 @@ simple_opcode(gt, 21).
 simple_opcode(gte, 22).
 simple_opcode(lt, 23).
 simple_opcode(lte, 24).
-simple_opcode(gt, 25).
+simple_opcode(eq, 25).
 simple_opcode(aget, 26).
 simple_opcode(text, 108).
 simple_opcode(sin, 80).
@@ -561,6 +563,8 @@ emit(X) --> { integer(X) }, emit_byte(X).
 % emit instructions with operands
 emit(const, Val) --> constant(Idx, Val),
                      emit_const_load(Idx).
+% emit constant that is always 16bits (to have predictable instr size)
+emit(constl, Val) --> constant(Idx, Val), emit(1), emit_uint16(Idx).
 
 emit(jz, Pos) --> emit(2), emit_uint16(Pos).
 emit(jnz, Pos) --> emit(3), emit_uint16(Pos).
@@ -742,6 +746,60 @@ compile(fncall(ident(FnName), ArgValues)) -->
     { length(ArgValues, ArgC) },
     emit(call, ArgC-JumpPos).
 
+compile(fncall(var(FnNameVar), ArgValues)) -->
+    % ugly hack to fn by name when we don't have the
+    % names even stored... emit comparison and jump for
+    % each function we know of
+    dbg(fncall_from_var(FnNameVar)),
+    %emit(const,0), % default "not found" jump addr
+    compile(var(FnNameVar)), % push value to compare
+    get(pos, StartPos),
+    get(code, SavedCode),
+    % compile check+call for each fn
+    set(code, []),
+    get(functions, Fns),
+    { length(ArgValues, ArgC),
+      length(Fns, FnsC),
+      Size = 13, % size of each fncall_switch item
+      EndPos is StartPos + FnsC*Size + 3
+    },
+    dbg(before_fncall_switch(Fns)),
+    compile(fncall_switch(ArgC, EndPos, Fns)), !,
+    % ^ after that, we have jump address in stack (or zero if not found)
+    dbg(after_fncall_switch),
+    get(code, SwitchCode),
+    { reverse(SwitchCode, Bytes) },
+    set(code, SavedCode),
+    set(pos, StartPos),
+    dbg(switch_code(Bytes)),
+    emit(Bytes),
+    dbg(fncall_by_var_finish).
+
+
+compile(fncall_switch(_, _, [])) --> dbg(last_switch_compiled).
+compile(fncall_switch(ArgC, EndPos, ['__main__'-_|Fns])) -->
+    !,
+    compile(fncall_switch(ArgC, EndPos, Fns)).
+compile(fncall_switch(ArgC, EndPos, [FnName-JumpPos|Fns])) -->
+    dbg(fncall_switch_0(argc(ArgC),endpos(EndPos),fn(FnName),jumppos(JumpPos),fns(Fns))),
+    emit(dup), % duplicate the var value we use for the eq check
+    emit(constl, FnName),
+    emit(eq),
+    dbg(fncall_switch_1),
+
+    get(pos, Before), { After is Before + 10 },
+    emit(jz, After), % jump after call
+
+    dbg(fncall_switch_1(emitting_call)),
+    % call function
+    emit(call, ArgC-JumpPos),
+    % jump to end (skip other tests)
+    emit(jmp, EndPos),
+
+    compile(fncall_switch(ArgC,EndPos,Fns)).
+
+% compile_file('programs/letters.pt', 'test.ptc').
+
 compile(for(Var, From, To, Step, Program)) -->
     global(Idx, Var), % should implement locals!
     compile(From),
@@ -762,17 +820,18 @@ compile(for(Var, ListExpr, Program)) -->
     % each loop advances index and gets the current value from list
     % if the value is zero (C string termination), exits the loop
     compile(ListExpr),
-    constant(Idx, 0), % push zero to stack
-    emit(const, Idx),
+    emit(const, 0), % push zero to stack
     % load current value in list to global Var
-    global(LoopVar, Var),
+    global(LoopVarIdx, Var),
     get(pos, LoopStart),
      % duplicate top 2 items in the stack (listexpr, and loop pos)
-    emit(stackref, 1),
+    emit(stackref, 2),
     emit(stackref, 2),
     % call AGET to access Nth item from list
     emit(aget),
-    emit(global_store, LoopVar),
+    emit(dup),
+    %emit(dup),
+    emit(global_store, LoopVarIdx),
     % compile program to get its size
     get(pos, BeforeProgram),
     { ProgramPos is BeforeProgram + 3 }, % reserve space for jz + addr
@@ -785,9 +844,10 @@ compile(for(Var, ListExpr, Program)) -->
     set(pos, BeforeProgram),
     % emit loop end check
     { length(ProgramCode, ProgramLength),
-      EndAddr is BeforeProgram + 3 + ProgramLength + 4},
-    emit(jz, EndAddr),
-    emit(ProgramCode),
+      EndAddr is BeforeProgram + 3 + ProgramLength + 4,
+      reverse(ProgramCode, Bytes) },
+    emit(jz, EndAddr), % if aget returned 0
+    emit(Bytes),
     % increment idx
     emit(inc),
     emit(jmp, LoopStart),
