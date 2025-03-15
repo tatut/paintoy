@@ -588,7 +588,7 @@ void update_and_draw(); // the main render loop fn
 Code code;
 // global variable refs
 Value *time_, *frame, *mouseX, *mouseY, *mouseLeft;
-bool showFPS;
+bool showFPS, showUI, paused;
 
 void run(IN in) {
   code_load(&code, in);
@@ -632,30 +632,42 @@ void run(IN in) {
   code_free(&code);
 }
 
+void draw_ui();
+
+#define COOLDOWN 16
+int cooldown = 0;
+
 void update_and_draw() {
-  if (frame != NULL) {
-    frame->value.number++;
-  }
-  if (time_ != NULL) {
-    time_->value.number = (double)GetTime();
-  }
-  if (mouseX != NULL || mouseY != NULL) {
-    Vector2 mouse = GetMousePosition();
-    if (mouseX != NULL)
-      mouseX->value.number = mouse.x;
-    if (mouseY != NULL)
-      mouseY->value.number = mouse.y;
-  }
-  if (mouseLeft != NULL) {
-    mouseLeft->value.number = IsMouseButtonDown(MOUSE_BUTTON_LEFT);
+  if(!paused) {
+    if (frame != NULL) {
+      frame->value.number++;
+    }
+    if (time_ != NULL) {
+      time_->value.number = (double)GetTime();
+    }
+    if (mouseX != NULL || mouseY != NULL) {
+      Vector2 mouse = GetMousePosition();
+      if (mouseX != NULL)
+        mouseX->value.number = mouse.x;
+      if (mouseY != NULL)
+        mouseY->value.number = mouse.y;
+    }
+    if (mouseLeft != NULL) {
+      mouseLeft->value.number = IsMouseButtonDown(MOUSE_BUTTON_LEFT);
+    }
   }
   BeginDrawing();
   ClearBackground(RAYWHITE);
   interpret(&code);
   if(showFPS) DrawFPS(10,10);
+  if(showUI) draw_ui();
   EndDrawing();
-  if(IsKeyPressed(KEY_Q)) CloseWindow();
-  if(IsKeyPressed(KEY_F)) showFPS=!showFPS;
+  if(IsKeyDown(KEY_Q)) CloseWindow();
+  if(!cooldown) {
+    if(IsKeyDown(KEY_F)) { showFPS=!showFPS; cooldown = COOLDOWN; }
+    if(IsKeyDown(KEY_U)) { showUI=!showUI; cooldown = COOLDOWN; }
+    if(IsKeyDown(KEY_P)) { paused=!paused; cooldown = COOLDOWN; }
+  } else cooldown--;
 }
 
 int main(int argc, char **argv) {
@@ -666,4 +678,63 @@ int main(int argc, char **argv) {
   }
   with_file(argv[1], run);
   return 0;
+}
+
+// End of interpreter
+
+/**
+ * SECTION: ui
+ *
+ * User interface for modifying values while a program is running.
+ * Uses raygui library.
+ */
+#define RAYGUI_IMPLEMENTATION
+#include "raygui.h"
+
+int edit_string_idx = -1;
+char edit_string_buf[255];
+
+void draw_ui() {
+
+  int x = 600;
+  int y = 10;
+  int h = 20;
+  for(int i=0;i<code.num_constants;i++) {
+    char msg[64];
+    int idx = snprintf(&msg[0], 64, "Constant %d: ", i);
+    if(code.constants[i].type == NUMBER) {
+      snprintf(&msg[idx], 64 - idx, "%f", code.constants[i].value.number);
+    } else {
+      snprintf(&msg[idx], 64 - idx, "%s", code.constants[i].value.string);
+    }
+    GuiLabel((Rectangle){x, y, 150, 10}, &msg[0]);
+    y += h;
+    if(code.constants[i].type == NUMBER) {
+      float val = code.constants[i].value.number;
+      GuiSliderBar((Rectangle){x,y,150,h},
+                "0", "1000", &val, 0.0, 1000.0);
+      code.constants[i].value.number = val;
+    } else {
+      if(edit_string_idx == i) {
+        if(GuiTextBox((Rectangle){x, y, 150, h}, &edit_string_buf[0], 254, true)) {
+          // enter pressed
+          free(code.constants[i].value.string);
+          code.constants[i].value.string = malloc(strlen(&edit_string_buf[0])+1);
+          strcpy(code.constants[i].value.string, &edit_string_buf[0]);
+          edit_string_idx = -1; // go back to display mode
+        }
+      } else {
+        GuiTextBox((Rectangle){x, y, 150, h}, code.constants[i].value.string,
+                   strlen(code.constants[i].value.string), false);
+        if(GuiButton((Rectangle){x+150,y,20,h}, "#22#")) {
+          edit_string_idx = i;
+          strncpy(&edit_string_buf[0], code.constants[i].value.string, 255);
+        }
+      }
+    }
+    y += 1.25*h;
+  }
+
+  GuiToggle((Rectangle) {430, 10, 100, 20}, "pause time", &paused);
+
 }
