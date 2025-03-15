@@ -58,6 +58,9 @@ GTE      22        0  greater than or equal
 LT       23        0  less than
 LTE      24        0  less than or equal
 EQ       25        0  equals
+AGET     26        0  get Nth value from array (string) and push it to stack
+STACKREF 27        1  duplicate Nth topmost value (0 arg is same as dup)
+JMP      28        2  unconditional jump
 SIN      80        0  sine
 COS      81        0  cosine
 TAN      82        0  tangent

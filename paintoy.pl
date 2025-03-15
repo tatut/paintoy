@@ -544,6 +544,7 @@ simple_opcode(gte, 22).
 simple_opcode(lt, 23).
 simple_opcode(lte, 24).
 simple_opcode(gt, 25).
+simple_opcode(aget, 26).
 simple_opcode(text, 108).
 simple_opcode(sin, 80).
 simple_opcode(cos, 81).
@@ -563,10 +564,13 @@ emit(const, Val) --> constant(Idx, Val),
 
 emit(jz, Pos) --> emit(2), emit_uint16(Pos).
 emit(jnz, Pos) --> emit(3), emit_uint16(Pos).
+emit(jmp, Pos) --> emit(28), emit_uint16(Pos).
+
 emit(call, ArgC-JumpPos) --> emit(14), emit(ArgC), emit_uint16(JumpPos).
 emit(arg, Arg) --> emit(16), emit(Arg).
 emit(global, Idx) --> emit(18), emit_uint16(Idx).
 emit(global_store, Idx) --> emit(19), emit_uint16(Idx).
+emit(stackref, N) --> emit(27), emit(N).
 
 emit_const_load(Idx) --> { Idx < 256 }, !, emit(0), emit(Idx).
 emit_const_load(Idx) --> emit(1), emit_uint16(Idx).
@@ -753,11 +757,41 @@ compile(for(Var, From, To, Step, Program)) -->
     emit(gt), % check if loop counter > to
     emit(jz, LoopStart).
 
-%compile(for(Var, ListExpr, Program)) :-
-%    % compile list expr and store it and 0 (index) to stack
-%    % each loop advances index and gets the current value from list
-%    % if the value is zero (C string termination), exits the loop
-%    compile(ListExpr),
+compile(for(Var, ListExpr, Program)) -->
+    % compile list expr and store it and 0 (index) to stack
+    % each loop advances index and gets the current value from list
+    % if the value is zero (C string termination), exits the loop
+    compile(ListExpr),
+    constant(Idx, 0), % push zero to stack
+    emit(const, Idx),
+    % load current value in list to global Var
+    global(LoopVar, Var),
+    get(pos, LoopStart),
+     % duplicate top 2 items in the stack (listexpr, and loop pos)
+    emit(stackref, 1),
+    emit(stackref, 2),
+    % call AGET to access Nth item from list
+    emit(aget),
+    emit(global_store, LoopVar),
+    % compile program to get its size
+    get(pos, BeforeProgram),
+    { ProgramPos is BeforeProgram + 3 }, % reserve space for jz + addr
+    get(code, SavedCode),
+    set(pos, ProgramPos),
+    set(code, []),
+    compile(Program),
+    get(code, ProgramCode),
+    set(code, SavedCode),
+    set(pos, BeforeProgram),
+    % emit loop end check
+    { length(ProgramCode, ProgramLength),
+      EndAddr is BeforeProgram + 3 + ProgramLength + 4},
+    emit(jz, EndAddr),
+    emit(ProgramCode),
+    % increment idx
+    emit(inc),
+    emit(jmp, LoopStart),
+    emit(pop2).
 
 compile(when(Expr, Program)) -->
     compile(Expr),
