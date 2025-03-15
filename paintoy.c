@@ -482,7 +482,7 @@ void interpret(Code* code) {
     case OP_AGET: {
       size_t n = (size_t)pop().value.number;
       char *arr = pop().value.string;
-      printf("got: %c\n", arr[n]);
+      dbg("got: %c", arr[n]);
       push(number(arr[n]));
       break;
     }
