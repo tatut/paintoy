@@ -769,11 +769,9 @@ compile(fncall(var(FnNameVar), ArgValues)) -->
     dbg(fncall_from_var(FnNameVar)),
     emit(const,0), % default "not found" jump addr
     compile(var(FnNameVar)), % push value to compare
-    get(pos, StartPos),
-    get(code, SavedCode),
     % compile check+call for each fn
-    set(code, []),
     get(functions, Fns0),
+    get(pos, StartPos),
     { exclude(=('__main__'-_), Fns0, Fns),
       length(ArgValues, ArgC),
       length(Fns, FnsC),
@@ -781,15 +779,11 @@ compile(fncall(var(FnNameVar), ArgValues)) -->
       EndPos is StartPos + FnsC*Size
     },
     dbg(before_fncall_switch(Fns)),
-    compile(fncall_switch(EndPos, Fns)), !,
+    sub(compile(fncall_switch(EndPos, Fns)), SwitchBytes, _Len),
     % ^ after that, we have jump address in stack (or zero if not found)
     dbg(after_fncall_switch),
-    get(code, SwitchCode),
-    { reverse(SwitchCode, Bytes) },
-    set(code, SavedCode),
-    set(pos, StartPos),
-    dbg(switch_code(Bytes)),
-    emit(Bytes),
+    dbg(switch_code(SwitchBytes)),
+    emit(SwitchBytes),
 
     % after all checks, see if we need a call
     emit(pop1), % discard comparison value
